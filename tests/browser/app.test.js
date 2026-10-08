@@ -6,8 +6,8 @@ import { chromium } from "playwright";
 import { createAppServer } from "../../server.js";
 
 function waveFile() {
-  const rate = 8000;
-  const samples = rate * 3;
+  const rate = 8000,
+    samples = rate * 3;
   const file = Buffer.alloc(44 + samples * 2);
   file.write("RIFF", 0);
   file.writeUInt32LE(file.length - 8, 4);
@@ -21,15 +21,15 @@ function waveFile() {
   file.writeUInt16LE(16, 34);
   file.write("data", 36);
   file.writeUInt32LE(samples * 2, 40);
-  for (let index = 0; index < samples; index++)
+  for (let i = 0; i < samples; i++)
     file.writeInt16LE(
-      Math.sin((index * 2 * Math.PI * 440) / rate) * 5000,
-      44 + index * 2,
+      Math.sin((i * 2 * Math.PI * 440) / rate) * 5000,
+      44 + i * 2,
     );
   return file;
 }
 
-test("countdown works in a real browser without external services", async (t) => {
+test("instrument interface works in Chromium without external services", async (t) => {
   const executablePath =
     process.env.CHROMIUM_PATH ||
     (existsSync("/usr/bin/chromium") ? "/usr/bin/chromium" : undefined);
@@ -44,11 +44,15 @@ test("countdown works in a real browser without external services", async (t) =>
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}`;
 
-  async function open({ mobile = false } = {}) {
+  async function open({
+    mobile = false,
+    reducedMotion = "no-preference",
+  } = {}) {
     const context = await browser.newContext({
       viewport: mobile
         ? { width: 390, height: 844 }
-        : { width: 1280, height: 1100 },
+        : { width: 1280, height: 800 },
+      reducedMotion,
     });
     t.after(() => context.close());
     await context.route("**/*", (route) =>
@@ -57,25 +61,21 @@ test("countdown works in a real browser without external services", async (t) =>
         ? route.continue()
         : route.abort(),
     );
-    // Observe real browser audio without replacing decoding or playback.
     await context.addInitScript(() => {
-      window.__bellNotes = 0;
-      const NativeContext = window.AudioContext;
-      window.AudioContext = class extends NativeContext {
-        createOscillator() {
-          const oscillator = super.createOscillator();
-          const start = oscillator.start.bind(oscillator);
-          oscillator.start = (...args) => {
-            window.__bellNotes++;
-            return start(...args);
-          };
-          return oscillator;
-        }
-      };
+      // Advance deadlines deterministically while leaving real media decoding/playback intact.
+      window.__timeOffset = 0;
+      Date.now = () => 1_000_000 + window.__timeOffset;
+      window.__audiblePlays = 0;
       const NativeAudio = window.Audio;
       window.Audio = function (...args) {
-        window.__alarmAudio = new NativeAudio(...args);
-        return window.__alarmAudio;
+        const audio = new NativeAudio(...args);
+        window.__alarmAudio = audio;
+        const play = audio.play.bind(audio);
+        audio.play = () => {
+          if (!audio.muted && audio.volume > 0) window.__audiblePlays++;
+          return play();
+        };
+        return audio;
       };
     });
     const page = await context.newPage();
@@ -86,175 +86,302 @@ test("countdown works in a real browser without external services", async (t) =>
         !request.url().startsWith(base) &&
         !/^(blob:|data:)/.test(request.url())
       )
-        errors.push(`Unexpected external request: ${request.url()}`);
+        errors.push(`External request: ${request.url()}`);
     });
     await page.goto(base);
     await page.waitForFunction(() => window.__alarmAudio);
+    await page.evaluate(() => document.fonts.ready);
     return { page, errors };
   }
-
-  async function setSeconds(page, seconds) {
-    await page.locator("#hours").fill("0");
-    await page.locator("#minutes").fill("0");
-    await page.locator("#seconds").fill(String(seconds));
-    await page.getByRole("button", { name: "Apply custom time" }).click();
-  }
-
-  async function selectCustom(page) {
-    await page.getByLabel("Custom sound", { exact: true }).check();
+  async function setTime(page, time) {
     await page
-      .locator("#audio-file")
-      .setInputFiles({
-        name: "test-alarm.wav",
-        mimeType: "audio/wav",
-        buffer: waveFile(),
-      });
+      .getByRole("textbox", { name: "Duration, minutes and seconds" })
+      .fill(time);
+    await page.locator("#duration-input").press("Enter");
+    await page.locator("#duration-input").blur();
+  }
+  async function advance(page, milliseconds) {
+    await page.evaluate((ms) => {
+      window.__timeOffset += ms;
+    }, milliseconds);
+  }
+  async function waitState(page, state) {
+    await page.waitForFunction(
+      (value) => document.getElementById("timer-face").dataset.state === value,
+      state,
+    );
+  }
+  async function screenshot(page, name) {
+    if (!process.env.SCREENSHOT_DIR) return;
+    await mkdir(process.env.SCREENSHOT_DIR, { recursive: true });
+    await page.screenshot({
+      path: `${process.env.SCREENSHOT_DIR}/${name}.png`,
+      fullPage: true,
+    });
   }
 
   await t.test(
-    "presets, custom durations, zero validation and custom-file prerequisite",
+    "first-use values, masked typing, paste, validation and fixed geometry",
     async () => {
       const { page, errors } = await open();
-      await page.getByRole("button", { name: "15 min", exact: true }).click();
-      assert.equal(await page.locator("#display-minutes").textContent(), "15");
-      await page.locator("#hours").fill("1");
-      await page.locator("#minutes").fill("2");
-      await page.locator("#seconds").fill("3");
-      await page.getByRole("button", { name: "Apply custom time" }).click();
-      assert.equal(await page.locator("#display-hours").textContent(), "01");
-      assert.equal(await page.locator("#display-minutes").textContent(), "02");
-      assert.equal(await page.locator("#display-seconds").textContent(), "03");
-      await setSeconds(page, 0);
-      assert.match(
-        await page.locator("#duration-error").textContent(),
-        /longer than zero/,
-      );
-      assert.equal(await page.locator("#display-hours").textContent(), "01");
-      await page.getByLabel("Custom sound", { exact: true }).check();
-      await page.locator("#start").click();
+      assert.equal(await page.locator("#timer-display").textContent(), "00:00");
       assert.equal(
-        await page.locator("#status-label").textContent(),
-        "READY WHEN YOU ARE",
+        await page.locator("html").getAttribute("data-theme"),
+        "dark",
       );
-      assert.match(
-        await page.locator("#sound-status").textContent(),
-        /Choose an audio file first/,
+      assert.equal(await page.locator("#volume").inputValue(), "60");
+      assert.equal(
+        await page.locator("#sound-name").textContent(),
+        "chicken orchestra",
       );
+      assert.equal(await page.locator("#start").isDisabled(), true);
+      const input = page.locator("#duration-input");
+      await input.focus();
+      await input.press("ControlOrMeta+a");
+      await input.pressSequentially("2500");
+      assert.equal(await input.inputValue(), "25:00");
+      await input.press("Enter");
+      const box = await page.locator("#time-field").boundingBox();
+      await input.press("ControlOrMeta+a");
+      await input.press("Backspace");
+      assert.equal(await input.inputValue(), "__:__");
+      await input.press("Enter");
+      assert.equal(await page.locator("#duration-error").isVisible(), true);
+      await input.fill("00:90");
+      await input.press("Space");
+      assert.equal(
+        await page.locator("#timer-face").getAttribute("data-state"),
+        "idle",
+      );
+      assert.equal(await page.evaluate(() => window.__audiblePlays), 0);
+      await input.evaluate((element) => {
+        const clipboardData = new DataTransfer();
+        clipboardData.setData("text/plain", "2500");
+        element.dispatchEvent(
+          new ClipboardEvent("paste", {
+            clipboardData,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+      });
+      await input.press("Enter");
+      assert.equal(await input.inputValue(), "25:00");
+      assert.deepEqual(await page.locator("#time-field").boundingBox(), box);
+      await input.blur();
+      await screenshot(page, "dark");
+      await page.getByRole("button", { name: "Light", exact: true }).click();
+      await screenshot(page, "light");
       assert.deepEqual(errors, []);
     },
   );
 
   await t.test(
-    "pause, resume and actual bundled MP3 playback at zero, stop and reset",
+    "Stop preserves the remainder and unchanged editing preserves Reset's original value",
     async () => {
       const { page, errors } = await open();
-      await setSeconds(page, 2);
+      await setTime(page, "25:00");
       await page.locator("#start").click();
-      assert.equal(await page.locator("#minutes").isDisabled(), true);
-      await page.getByRole("button", { name: "Pause countdown" }).click();
-      const paused = await page.locator("#display-seconds").textContent();
-      await page.waitForTimeout(1100);
+      await advance(page, 746_250);
+      await page.locator("#stop").click();
+      assert.equal(await page.locator("#duration-input").inputValue(), "12:34");
+      await page.locator("#duration-input").focus();
+      await page.locator("#duration-input").blur();
+      await page.locator("#start").click();
+      await advance(page, 1000);
+      await page.locator("#pause").click();
+      assert.equal(await page.locator("#timer-display").textContent(), "12:33");
+      await page.locator("#reset").click();
+      assert.equal(await page.locator("#timer-display").textContent(), "25:00");
+      assert.equal(await page.evaluate(() => window.__audiblePlays), 0);
+      assert.deepEqual(errors, []);
+    },
+  );
+
+  await t.test(
+    "display single clicks pause/resume and double clicks reset without a delayed toggle",
+    async () => {
+      const { page, errors } = await open();
+      await setTime(page, "25:00");
+      await page.locator("#start").click();
+      await advance(page, 30_000);
+      await page
+        .getByRole("button", { name: "Pause timer", exact: true })
+        .click();
+      await waitState(page, "paused");
+      await page
+        .getByRole("button", { name: "Resume timer", exact: true })
+        .dblclick();
+      await waitState(page, "running");
+      await page
+        .getByRole("button", { name: "Pause timer", exact: true })
+        .dblclick();
+      await waitState(page, "idle");
+      await page.waitForTimeout(450);
+      assert.equal(await page.locator("#timer-display").textContent(), "25:00");
       assert.equal(
-        await page.locator("#display-seconds").textContent(),
-        paused,
+        await page.locator("#timer-face").getAttribute("data-state"),
+        "idle",
       );
+      assert.equal(await page.evaluate(() => window.__audiblePlays), 0);
+      assert.deepEqual(errors, []);
+    },
+  );
+
+  await t.test(
+    "global Space and Escape work from editor, volume, menu and theme focus",
+    async () => {
+      const { page, errors } = await open();
+      await page.locator("#duration-input").fill("00:30");
+      await page.locator("#duration-input").press("Space");
+      await waitState(page, "running");
+      await page.locator("#volume").focus();
+      await page.keyboard.press("Space");
+      await waitState(page, "paused");
+      await page.locator("#sound-selector").click();
+      await page.keyboard.press("Space");
+      await waitState(page, "running");
+      await page.locator("#theme-light").focus();
+      await page.keyboard.down("Space");
+      await page.keyboard.down("Space");
+      await page.keyboard.up("Space");
+      await waitState(page, "paused");
       assert.equal(
-        await page.locator("#status-label").textContent(),
-        "TAKE A BREATHER",
+        await page.locator("html").getAttribute("data-theme"),
+        "dark",
       );
-      await page.getByRole("button", { name: "Resume countdown" }).click();
-      await page.waitForFunction(
-        () =>
-          document.getElementById("status-label").textContent ===
-            "THE BIG FINISH" &&
-          !window.__alarmAudio.paused &&
-          window.__alarmAudio.currentTime > 0,
-      );
-      assert.equal(await page.locator("#display-seconds").textContent(), "00");
-      assert.equal(
-        await page.locator(".progress-track").getAttribute("aria-valuenow"),
-        "100",
-      );
-      assert.equal(await page.locator("#finish-notice").isVisible(), true);
-      const sound = await page.evaluate(() => ({
-        src: window.__alarmAudio.currentSrc,
-        volume: window.__alarmAudio.volume,
-        duration: window.__alarmAudio.duration,
-      }));
-      assert.match(sound.src, /\/sounds\/screaming-chickens\.mp3$/);
-      assert.equal(sound.volume, 0.8);
-      assert.ok(sound.duration > 10 && sound.duration < 12);
-      await page.getByRole("button", { name: "Stop sound" }).click();
+      await page.keyboard.press("Escape");
+      assert.equal(await page.locator("#timer-display").textContent(), "00:00");
+      assert.equal(await page.locator("#sound-menu").isVisible(), false);
+      assert.equal(await page.locator("#reset").isDisabled(), true);
       assert.equal(await page.evaluate(() => window.__alarmAudio.paused), true);
+      await page.locator("#duration-input").fill("__:__");
+      await page.keyboard.press("Escape");
+      assert.equal(await page.locator("#duration-input").inputValue(), "00:00");
+      assert.deepEqual(errors, []);
+    },
+  );
+
+  await t.test(
+    "final-ten-second warning, paused warning, light theme and real MP3 alarm once",
+    async () => {
+      const { page, errors } = await open();
+      await setTime(page, "00:11");
+      await page.locator("#start").click();
       assert.equal(
-        await page.getByRole("button", { name: "Sound stopped" }).isDisabled(),
+        await page
+          .locator("#timer-face")
+          .evaluate((el) => el.classList.contains("warning")),
+        false,
+      );
+      await advance(page, 1000);
+      await page.waitForFunction(() =>
+        document.getElementById("timer-face").classList.contains("pulsing"),
+      );
+      await page.locator("#pause").click();
+      assert.equal(
+        await page
+          .locator("#timer-face")
+          .evaluate((el) => el.classList.contains("warning")),
         true,
       );
-      await page.getByRole("button", { name: "Reset", exact: true }).click();
-      assert.equal(await page.locator("#display-seconds").textContent(), "02");
-      assert.equal(await page.locator("#finish-notice").isVisible(), false);
+      assert.equal(
+        await page
+          .locator("#timer-face")
+          .evaluate((el) => el.classList.contains("pulsing")),
+        false,
+      );
+      await page.locator("#theme-light").click();
+      assert.equal(await page.locator("#timer-display").textContent(), "00:10");
+      await screenshot(page, "paused-light");
+      await page.locator("#start").click();
+      await advance(page, 1000);
+      await page.waitForFunction(
+        () => document.getElementById("timer-display").textContent === "00:09",
+      );
+      await screenshot(page, "warning-light");
+      await page.locator("#theme-dark").click();
+      await screenshot(page, "warning-dark");
+      await advance(page, 9000);
+      await waitState(page, "finished");
+      await page.waitForFunction(
+        () =>
+          !window.__alarmAudio.paused && window.__alarmAudio.currentTime > 0,
+      );
+      assert.match(
+        await page.evaluate(() => window.__alarmAudio.currentSrc),
+        /screaming-chickens\.mp3$/,
+      );
+      assert.equal(await page.evaluate(() => window.__alarmAudio.volume), 0.6);
+      assert.equal(await page.evaluate(() => window.__audiblePlays), 1);
+      await page.waitForTimeout(300);
+      assert.equal(await page.evaluate(() => window.__audiblePlays), 1);
+      await page.locator("#mute").click();
+      assert.equal(await page.evaluate(() => window.__alarmAudio.paused), true);
+      await page.locator("#stop").click();
+      assert.equal(
+        await page
+          .locator("#timer-face")
+          .evaluate((el) => el.classList.contains("warning")),
+        false,
+      );
+      await page.locator("#reset").click();
+      assert.equal(await page.locator("#timer-display").textContent(), "00:11");
       assert.deepEqual(errors, []);
     },
   );
 
   await t.test(
-    "custom file plays at zero and switching sounds preserves the selection",
+    "mute, zero volume and preferences persist without changing the countdown",
     async () => {
       const { page, errors } = await open();
-      await selectCustom(page);
-      const customURL = await page.evaluate(() => window.__alarmAudio.src);
-      assert.match(customURL, /^blob:/);
-      await page.getByLabel("Chicken alarm", { exact: true }).check();
-      assert.match(
-        await page.evaluate(() => window.__alarmAudio.src),
-        /screaming-chickens\.mp3$/,
-      );
-      await page.getByLabel("Custom sound", { exact: true }).check();
-      assert.equal(
-        await page.evaluate(() => window.__alarmAudio.src),
-        customURL,
-      );
-      assert.equal(
-        await page.locator("#file-name").textContent(),
-        "test-alarm.wav",
-      );
-      await setSeconds(page, 1);
+      await page.locator("#volume").fill("35");
+      await page.locator("#mute").click();
+      assert.equal(await page.locator("#volume-value").textContent(), "Muted");
+      await setTime(page, "00:01");
       await page.locator("#start").click();
-      await page.waitForFunction(
-        () =>
-          document.getElementById("status-label").textContent ===
-            "THE BIG FINISH" &&
-          !window.__alarmAudio.paused &&
-          window.__alarmAudio.currentTime > 0,
-      );
-      assert.equal(
-        await page.evaluate(() => window.__alarmAudio.currentSrc),
-        customURL,
-      );
-      await page.locator("#stop-alarm").click();
-      assert.equal(await page.evaluate(() => window.__alarmAudio.paused), true);
-      assert.equal(
-        await page.evaluate(() => window.__alarmAudio.currentTime),
-        0,
-      );
+      await advance(page, 1000);
+      await waitState(page, "finished");
+      assert.equal(await page.evaluate(() => window.__audiblePlays), 0);
+      await page.locator("#mute").click();
+      assert.equal(await page.locator("#volume").inputValue(), "35");
+      await page.locator("#volume").fill("0");
+      await page.locator("#mute").click();
+      assert.equal(await page.locator("#volume").inputValue(), "35");
+      await page.locator("#theme-light").click();
       await page.reload();
       assert.equal(
-        await page.getByLabel("Chicken alarm", { exact: true }).isChecked(),
-        true,
+        await page.locator("html").getAttribute("data-theme"),
+        "light",
       );
-      assert.match(
-        await page.evaluate(() => window.__alarmAudio.src),
-        /screaming-chickens\.mp3$/,
+      assert.equal(await page.locator("#volume").inputValue(), "35");
+      assert.equal(
+        await page.locator("#mute").getAttribute("aria-pressed"),
+        "false",
       );
       assert.deepEqual(errors, []);
     },
   );
 
   await t.test(
-    "invalid audio produces a backup bell that stops on request",
+    "valid custom audio replaces the sound during a run; invalid and cancelled choices preserve it",
     async () => {
       const { page, errors } = await open();
-      await page.getByLabel("Custom sound", { exact: true }).check();
+      await setTime(page, "00:30");
+      await page.locator("#start").click();
+      const name = "my-very-long-custom-countdown-alarm.wav";
+      await page
+        .locator("#audio-file")
+        .setInputFiles({ name, mimeType: "audio/wav", buffer: waveFile() });
+      await page.waitForFunction(() =>
+        document.getElementById("sound-selector").title.endsWith(".wav"),
+      );
+      assert.equal(
+        await page.locator("#sound-selector").getAttribute("title"),
+        name,
+      );
+      assert.equal(await page.evaluate(() => window.__audiblePlays), 0);
+      const source = await page.evaluate(() => window.__alarmAudio.src);
       await page
         .locator("#audio-file")
         .setInputFiles({
@@ -262,80 +389,136 @@ test("countdown works in a real browser without external services", async (t) =>
           mimeType: "audio/mpeg",
           buffer: Buffer.from("not audio"),
         });
-      await setSeconds(page, 1);
-      await page.locator("#start").click();
       await page.waitForFunction(() =>
         document
-          .getElementById("sound-status")
-          .textContent.includes("Playing the backup bell"),
+          .getElementById("audio-message")
+          .textContent.includes("cannot be played"),
+      );
+      assert.equal(await page.evaluate(() => window.__alarmAudio.src), source);
+      await page.locator("#audio-file").setInputFiles([]);
+      assert.equal(await page.evaluate(() => window.__alarmAudio.src), source);
+      assert.equal(
+        await page.locator("#timer-face").getAttribute("data-state"),
+        "running",
+      );
+      await advance(page, 30_000);
+      await waitState(page, "finished");
+      await page.waitForFunction(
+        () =>
+          !window.__alarmAudio.paused && window.__alarmAudio.currentTime > 0,
+      );
+      assert.equal(
+        await page.evaluate(() => window.__alarmAudio.currentSrc),
+        source,
+      );
+      await page.keyboard.press("Escape");
+      assert.equal(await page.evaluate(() => window.__alarmAudio.paused), true);
+      await page.locator("#sound-selector").click();
+      await page
+        .getByRole("menuitemradio", { name: "chicken orchestra", exact: true })
+        .click();
+      assert.match(
+        await page.evaluate(() => window.__alarmAudio.src),
+        /screaming-chickens\.mp3$/,
+      );
+      await page.locator("#sound-selector").click();
+      await page.getByRole("menuitemradio", { name, exact: true }).click();
+      assert.equal(await page.evaluate(() => window.__alarmAudio.src), source);
+      await page.reload();
+      assert.equal(
+        await page.locator("#sound-name").textContent(),
+        "chicken orchestra",
       );
       assert.match(
-        await page.locator("#sound-status").textContent(),
-        /can’t be played/,
+        await page.locator("#audio-message").textContent(),
+        /Custom sound unavailable/,
       );
-      assert.ok(await page.evaluate(() => window.__bellNotes >= 3));
-      await page.locator("#stop-alarm").click();
-      const notes = await page.evaluate(() => window.__bellNotes);
-      await page.waitForTimeout(2200);
-      assert.equal(await page.evaluate(() => window.__bellNotes), notes);
       assert.deepEqual(errors, []);
     },
   );
 
   await t.test(
-    "sound tests, volume, natural sample completion and mobile layout",
+    "Stop, Reset and Escape at the deadline suppress a pending completion alarm",
     async () => {
-      const { page, errors } = await open({ mobile: true });
-      await page.locator("#volume").fill("40");
-      assert.equal(await page.locator("#volume-value").textContent(), "40%");
-      await page.getByRole("button", { name: "Test sound" }).click();
-      await page.waitForFunction(
-        () =>
-          !window.__alarmAudio.paused && window.__alarmAudio.currentTime > 0,
-      );
-      assert.equal(await page.evaluate(() => window.__alarmAudio.volume), 0.4);
-      await page.getByRole("button", { name: "Stop test" }).click();
-      assert.equal(
-        await page.locator("#sound-status").textContent(),
-        "Sound test stopped.",
-      );
-      await selectCustom(page);
-      await page.getByRole("button", { name: "Test sound" }).click();
-      await page.waitForFunction(
-        () =>
-          document.getElementById("sound-status").textContent ===
-          "Sound test complete.",
-      );
-      assert.equal(
-        await page.getByRole("button", { name: "Test sound" }).isVisible(),
-        true,
-      );
-      await page.getByLabel("Chicken alarm", { exact: true }).check();
-      assert.equal(
-        await page.evaluate(
-          () => document.documentElement.scrollWidth <= window.innerWidth,
-        ),
-        true,
-      );
-      if (process.env.SCREENSHOT_DIR) {
-        await mkdir(process.env.SCREENSHOT_DIR, { recursive: true });
-        await page.screenshot({
-          path: `${process.env.SCREENSHOT_DIR}/mobile.png`,
-          fullPage: true,
-        });
+      const { page, errors } = await open();
+      for (const action of ["stop", "reset", "escape"]) {
+        await setTime(page, "00:01");
+        await page.locator("#start").click();
+        await page.evaluate((action) => {
+          window.__timeOffset += 1000;
+          if (action === "escape")
+            document.dispatchEvent(
+              new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+            );
+          else document.getElementById(action).click();
+        }, action);
+        await page.waitForTimeout(150);
+        assert.equal(await page.evaluate(() => window.__audiblePlays), 0);
+        assert.equal(
+          await page.locator("#timer-face").getAttribute("data-state"),
+          "idle",
+        );
       }
-      await page.setViewportSize({ width: 1280, height: 1100 });
+      assert.deepEqual(errors, []);
+    },
+  );
+
+  await t.test(
+    "reduced motion and responsive dock keep the timer and controls visible",
+    async () => {
+      const { page, errors } = await open({
+        mobile: true,
+        reducedMotion: "reduce",
+      });
+      await setTime(page, "00:09");
+      await page.locator("#start").click();
+      assert.equal(
+        await page
+          .locator("#timer-display")
+          .evaluate((el) => getComputedStyle(el).animationName),
+        "none",
+      );
       assert.equal(
         await page.evaluate(
-          () => document.documentElement.scrollWidth <= window.innerWidth,
+          () => document.documentElement.scrollWidth <= innerWidth,
         ),
         true,
       );
-      if (process.env.SCREENSHOT_DIR)
-        await page.screenshot({
-          path: `${process.env.SCREENSHOT_DIR}/desktop.png`,
-          fullPage: true,
-        });
+      const timerBox = await page.locator("#timer-face").boundingBox();
+      const dockBox = await page.locator("#control-dock").boundingBox();
+      assert.ok(timerBox.y + timerBox.height < dockBox.y);
+      assert.ok(dockBox.y + dockBox.height <= 844);
+      for (const selector of [
+        "#start",
+        "#pause",
+        "#stop",
+        "#reset",
+        "#mute",
+        "#sound-selector",
+        "#theme-dark",
+      ]) {
+        const box = await page.locator(selector).boundingBox();
+        assert.ok(box.height >= 44);
+        assert.ok(box.width >= 44);
+      }
+      await screenshot(page, "mobile-dark");
+      await page.locator("#theme-light").click();
+      await screenshot(page, "mobile-light");
+      await page.keyboard.press("Escape");
+      await page.setViewportSize({ width: 768, height: 1024 });
+      assert.equal(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+        true,
+      );
+      await page.setViewportSize({ width: 320, height: 568 });
+      assert.equal(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+        true,
+      );
       assert.deepEqual(errors, []);
     },
   );

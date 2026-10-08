@@ -16,6 +16,9 @@ test("serves the complete app with browser-safe content types", async (t) => {
   assert.equal(sound.status, 200);
   assert.equal(sound.headers.get("content-type"), "audio/mpeg");
   assert.ok((await sound.arrayBuffer()).byteLength > 0);
+  const font = await fetch(`${base}/fonts/BarlowCondensed-ExtraBold.ttf`);
+  assert.equal(font.status, 200);
+  assert.equal(font.headers.get("content-type"), "font/ttf");
   const missing = await fetch(`${base}/missing`);
   assert.equal(missing.status, 404);
   const protectedFile = await fetch(`${base}/%2e%2e%2fpackage.json`);

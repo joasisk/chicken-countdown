@@ -10,6 +10,7 @@ const types = {
   ".js": "text/javascript; charset=utf-8",
   ".svg": "image/svg+xml",
   ".mp3": "audio/mpeg",
+  ".ttf": "font/ttf",
 };
 
 export function createAppServer() {

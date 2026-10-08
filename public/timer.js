@@ -1,35 +1,27 @@
-export function durationFromParts(hours, minutes, seconds) {
-  const parts = [hours, minutes, seconds].map(Number);
-  if (
-    parts.some((value) => !Number.isInteger(value) || value < 0) ||
-    parts[0] > 99 ||
-    parts[1] > 59 ||
-    parts[2] > 59
-  ) {
-    throw new RangeError("Use 0–99 hours and 0–59 minutes or seconds.");
-  }
-  const duration = (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000;
-  if (duration === 0) throw new RangeError("Set a countdown longer than zero.");
-  return duration;
+export const MAX_DURATION = 5_999_000;
+
+export function durationFromInput(value) {
+  const text = String(value).trim();
+  const match =
+    /^(\d{1,2}):(\d{1,2})$/.exec(text) || /^(\d{2})(\d{2})$/.exec(text);
+  if (!match || Number(match[2]) > 59)
+    throw new RangeError("Enter a complete time from 00:00 to 99:59.");
+  return (Number(match[1]) * 60 + Number(match[2])) * 1000;
 }
 
-export function timeParts(milliseconds) {
+export function formatTime(milliseconds) {
   const seconds = Math.ceil(Math.max(0, milliseconds) / 1000);
-  return [
-    Math.floor(seconds / 3600),
-    Math.floor((seconds % 3600) / 60),
-    seconds % 60,
-  ].map((part) => String(part).padStart(2, "0"));
+  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 export class Countdown {
-  constructor(duration = 300_000) {
+  constructor(duration = 0) {
     this.configure(duration);
   }
 
   configure(duration) {
-    if (!Number.isFinite(duration) || duration <= 0)
-      throw new RangeError("Duration must be positive.");
+    if (!Number.isInteger(duration) || duration < 0 || duration > MAX_DURATION)
+      throw new RangeError("Duration must be between 00:00 and 99:59.");
     this.duration = duration;
     this.reset();
   }
@@ -40,11 +32,17 @@ export class Countdown {
     this.status = "idle";
   }
 
+  clear() {
+    this.configure(0);
+  }
+
   start(now = Date.now()) {
-    if (this.status === "running") return;
+    if (this.status === "running") return false;
     if (this.status === "finished") this.remaining = this.duration;
+    if (this.remaining === 0) return false;
     this.deadline = now + this.remaining;
     this.status = "running";
+    return true;
   }
 
   pause(now = Date.now()) {
@@ -55,6 +53,14 @@ export class Countdown {
     this.status = "paused";
   }
 
+  stop(now = Date.now()) {
+    if (this.status === "running")
+      this.remaining = Math.max(0, this.deadline - now);
+    this.remaining = Math.ceil(this.remaining / 1000) * 1000;
+    this.deadline = null;
+    this.status = "idle";
+  }
+
   snapshot(now = Date.now()) {
     if (this.status === "running") {
       this.remaining = Math.max(0, this.deadline - now);
@@ -63,10 +69,6 @@ export class Countdown {
         this.deadline = null;
       }
     }
-    return {
-      status: this.status,
-      remaining: this.remaining,
-      progress: 1 - this.remaining / this.duration,
-    };
+    return { status: this.status, remaining: this.remaining };
   }
 }

@@ -1,51 +1,72 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Countdown, durationFromParts, timeParts } from "../public/timer.js";
+import {
+  Countdown,
+  durationFromInput,
+  formatTime,
+  MAX_DURATION,
+} from "../public/timer.js";
 
-test("counts down using deadlines, including time spent in an inactive tab", () => {
+test("first use is stopped at zero and cannot start", () => {
+  const timer = new Countdown();
+  assert.deepEqual(timer.snapshot(100), { status: "idle", remaining: 0 });
+  assert.equal(timer.start(100), false);
+});
+
+test("counts down from a deadline even after a background delay", () => {
   const timer = new Countdown(10_000);
   timer.start(1000);
   assert.equal(timer.snapshot(6500).remaining, 4500);
   assert.deepEqual(timer.snapshot(30_000), {
     status: "finished",
     remaining: 0,
-    progress: 1,
   });
   assert.equal(timer.snapshot(40_000).status, "finished");
 });
 
-test("pausing preserves precise time and resuming establishes a new deadline", () => {
+test("pause and resume preserve precise remaining time", () => {
   const timer = new Countdown(10_000);
   timer.start(1000);
-  timer.pause(3500);
-  assert.equal(timer.snapshot(100_000).remaining, 7500);
-  assert.equal(timer.status, "paused");
+  timer.pause(3501);
+  assert.equal(timer.snapshot(100_000).remaining, 7499);
   timer.start(100_000);
-  assert.equal(timer.snapshot(101_000).remaining, 6500);
-  assert.equal(timer.snapshot(107_500).status, "finished");
+  assert.equal(timer.snapshot(101_000).remaining, 6499);
+  assert.equal(timer.snapshot(107_499).status, "finished");
 });
 
-test("reset and restart restore the chosen duration", () => {
+test("Stop snaps the remainder upward and Reset retains the original duration", () => {
+  const timer = new Countdown(1_500_000);
+  timer.start(0);
+  timer.stop(746_250);
+  assert.equal(formatTime(timer.remaining), "12:34");
+  assert.equal(timer.duration, 1_500_000);
+  assert.equal(timer.status, "idle");
+  timer.start(800_000);
+  assert.equal(timer.snapshot(801_000).remaining, 753_000);
+  timer.reset();
+  assert.equal(formatTime(timer.remaining), "25:00");
+});
+
+test("Stop, Reset and Clear cancel a deadline without completing", () => {
+  for (const action of ["stop", "reset", "clear"]) {
+    const timer = new Countdown(1000);
+    timer.start(0);
+    timer[action](1000);
+    assert.equal(timer.snapshot(99_000).status, "idle");
+  }
+  const timer = new Countdown(1000);
+  timer.clear();
+  timer.reset();
+  assert.equal(timer.duration, 0);
+  assert.equal(timer.remaining, 0);
+});
+
+test("restart after completion restores the original duration", () => {
   const timer = new Countdown(1000);
   timer.start(0);
   timer.snapshot(1000);
   timer.start(2000);
   assert.equal(timer.snapshot(2000).remaining, 1000);
-  timer.reset();
-  assert.deepEqual(timer.snapshot(99_000), {
-    status: "idle",
-    remaining: 1000,
-    progress: 0,
-  });
-  timer.configure(5000);
-  assert.equal(timer.duration, 5000);
-});
-
-test("pause at the deadline completes instead of preserving an expired countdown", () => {
-  const timer = new Countdown(1000);
-  timer.start(500);
-  timer.pause(1500);
-  assert.equal(timer.status, "finished");
 });
 
 test("starting an already running countdown does not extend it", () => {
@@ -55,25 +76,30 @@ test("starting an already running countdown does not extend it", () => {
   assert.equal(timer.snapshot(1500).status, "finished");
 });
 
-test("formats hours, minutes and seconds without displaying zero early", () => {
-  assert.deepEqual(timeParts(3_661_000), ["01", "01", "01"]);
-  assert.deepEqual(timeParts(1), ["00", "00", "01"]);
-  assert.deepEqual(timeParts(-1), ["00", "00", "00"]);
-  assert.deepEqual(timeParts(60_001), ["00", "01", "01"]);
+test("MM:SS rounds up and never displays zero prematurely", () => {
+  assert.equal(formatTime(1), "00:01");
+  assert.equal(formatTime(60_001), "01:01");
+  assert.equal(formatTime(0), "00:00");
+  assert.equal(formatTime(MAX_DURATION), "99:59");
 });
 
-test("custom duration rejects zero, fractions and out-of-range parts", () => {
-  assert.equal(durationFromParts("1", "2", "3"), 3_723_000);
-  for (const parts of [
-    [0, 0, 0],
-    [-1, 0, 1],
-    [100, 0, 0],
-    [0, 60, 0],
-    [0, 0, 60],
-    [0, 0, 1.5],
-    ["bad", 1, 0],
-  ]) {
-    assert.throws(() => durationFromParts(...parts), RangeError);
-  }
-  assert.throws(() => new Countdown(0), RangeError);
+test("validates unambiguous minute/second inputs and the 99:59 limit", () => {
+  assert.equal(durationFromInput("2500"), 1_500_000);
+  assert.equal(durationFromInput("25:00"), 1_500_000);
+  assert.equal(durationFromInput("1:2"), 62_000);
+  assert.equal(durationFromInput("00:00"), 0);
+  assert.equal(durationFromInput("99:59"), MAX_DURATION);
+  for (const value of [
+    "90",
+    "00:60",
+    "100:00",
+    "__:00",
+    "bad",
+    "1.5:00",
+    "-1:00",
+    "25000",
+  ])
+    assert.throws(() => durationFromInput(value), RangeError);
+  for (const value of [-1, MAX_DURATION + 1, Infinity, 0.5])
+    assert.throws(() => new Countdown(value), RangeError);
 });

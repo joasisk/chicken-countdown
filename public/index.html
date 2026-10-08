@@ -1,282 +1,281 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#faf7ef" />
+    <meta name="theme-color" content="#090b0e" />
     <meta
       name="description"
-      content="Set a countdown. Stay focused. Let the chicken announce the finish."
+      content="A quiet countdown instrument. Set your time and let the chicken orchestra announce the finish."
     />
     <title>Chicken Countdown</title>
     <link rel="icon" href="chicken.svg" type="image/svg+xml" />
+    <link
+      rel="preload"
+      href="fonts/BarlowCondensed-ExtraBold.ttf"
+      as="font"
+      type="font/ttf"
+      crossorigin
+    />
     <link rel="stylesheet" href="styles.css" />
     <script type="module" src="app.js"></script>
   </head>
   <body>
-    <div class="page-shell">
-      <header class="site-header">
-        <a class="brand" href="./" aria-label="Chicken Countdown home"
-          ><img src="chicken.svg" width="44" height="44" alt="" /><span
-            >chicken<span class="brand-sub">countdown</span></span
-          ></a
-        >
-        <span class="local-badge"
-          ><span></span> A little timer. A lot of personality.</span
-        >
-      </header>
-
-      <main>
-        <div class="intro">
-          <span class="eyebrow">MAKE TIME FOR WHAT MATTERS</span>
-          <h1>A little focus.<br />A big <span>finish.</span></h1>
-          <p>You handle the task. The chicken handles the announcement.</p>
-        </div>
-
-        <div class="workspace">
-          <section
-            class="timer-card"
-            id="timer-card"
-            aria-label="Countdown timer"
-          >
-            <div class="timer-top">
-              <span class="status-badge" id="status-badge"
-                ><span></span
-                ><span id="status-label">READY WHEN YOU ARE</span></span
-              ><button
-                id="fullscreen"
-                class="icon-button"
-                type="button"
-                aria-label="Enter fullscreen"
-                title="Fullscreen"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" />
-                </svg>
-              </button>
-            </div>
-            <div class="timer-center">
-              <div
-                class="timer-display"
-                id="timer-display"
-                role="timer"
-                aria-label="5 minutes remaining"
-                aria-live="off"
-              >
-                <div>
-                  <span id="display-hours">00</span><small>HOURS</small>
-                </div>
-                <b>:</b>
-                <div>
-                  <span id="display-minutes">05</span><small>MINUTES</small>
-                </div>
-                <b>:</b>
-                <div>
-                  <span id="display-seconds">00</span><small>SECONDS</small>
-                </div>
-              </div>
-              <p class="timer-message" id="timer-message">
-                One thing at a time. You've got this.
-              </p>
-            </div>
+    <svg
+      class="icon-definitions"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <defs>
+        <symbol id="icon-play" viewBox="0 0 24 24">
+          <path d="M6 3.5v17l15-8.5z" class="filled" />
+        </symbol>
+        <symbol id="icon-pause" viewBox="0 0 24 24">
+          <path d="M5 4h5v16H5zM14 4h5v16h-5z" class="filled" />
+        </symbol>
+        <symbol id="icon-stop" viewBox="0 0 24 24">
+          <rect x="5" y="5" width="14" height="14" rx="1.5" class="filled" />
+        </symbol>
+        <symbol id="icon-reset" viewBox="0 0 24 24">
+          <path d="M4 9a8 8 0 1 1 .6 7M4 3v6h6" />
+        </symbol>
+        <symbol id="icon-speaker" viewBox="0 0 24 24">
+          <path d="M3 9h4l5-5v16l-5-5H3z" class="filled" />
+          <path d="M16 8a6 6 0 0 1 0 8M19 5a10 10 0 0 1 0 14" />
+        </symbol>
+        <symbol id="icon-muted" viewBox="0 0 24 24">
+          <path d="M3 9h4l5-5v16l-5-5H3z" class="filled" />
+          <path d="m16 9 6 6m0-6-6 6" />
+        </symbol>
+        <symbol id="icon-note" viewBox="0 0 24 24">
+          <path d="M9 17V5l11-2v12M9 8l11-2" />
+          <ellipse cx="6" cy="18" rx="3" ry="2" class="filled" />
+          <ellipse cx="17" cy="16" rx="3" ry="2" class="filled" />
+        </symbol>
+        <symbol id="icon-chevron" viewBox="0 0 24 24">
+          <path d="m6 9 6 6 6-6" />
+        </symbol>
+        <symbol id="icon-moon" viewBox="0 0 24 24">
+          <path d="M20 15A9 9 0 0 1 9 4a9 9 0 1 0 11 11Z" class="filled" />
+        </symbol>
+        <symbol id="icon-sun" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="4" class="filled" />
+          <path
+            d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"
+          />
+        </symbol>
+        <symbol id="icon-check" viewBox="0 0 24 24">
+          <path d="m5 12 4 4 10-10" />
+        </symbol>
+      </defs>
+    </svg>
+    <main class="instrument" aria-label="Chicken Countdown">
+      <h1 class="sr-only">Chicken Countdown</h1>
+      <section class="timer-stage" aria-label="Countdown timer">
+        <div class="timer-face" id="timer-face">
+          <div class="time-field" id="time-field">
             <div
-              class="progress-track"
-              role="progressbar"
-              aria-label="Countdown progress"
-              aria-valuemin="0"
-              aria-valuemax="100"
-              aria-valuenow="0"
+              class="time-value"
+              id="timer-display"
+              role="timer"
+              aria-live="off"
+              aria-label="0 minutes, 0 seconds remaining"
             >
-              <div id="progress-fill"></div>
+              00:00
             </div>
-            <div class="timer-actions">
-              <button id="start" type="button" class="button button-primary">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="m9 5 11 7-11 7z" /></svg
-                ><span>Start countdown</span></button
-              ><button id="reset" type="button" class="button button-secondary">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M3 10a9 9 0 1 1 1.6 7M3 4v6h6" /></svg
-                >Reset
-              </button>
-            </div>
-            <div id="finish-notice" class="finish-notice" hidden>
-              <span><strong>Time’s up!</strong> Your moment has arrived.</span
-              ><button
-                id="stop-alarm"
-                class="button button-small"
-                type="button"
-              >
-                Stop sound
-              </button>
-            </div>
-            <p
-              id="announcer"
-              class="sr-only"
-              role="status"
-              aria-live="polite"
-            ></p>
-          </section>
-
-          <aside class="settings">
-            <section class="settings-card" aria-labelledby="duration-heading">
-              <div class="section-heading">
-                <span class="section-number">01</span>
-                <h2 id="duration-heading">Set your time</h2>
-              </div>
-              <p class="section-description">
-                A quick pick, or make it your own.
-              </p>
-              <div class="presets" aria-label="Quick durations">
-                <button type="button" data-minutes="1">1 min</button
-                ><button
-                  type="button"
-                  data-minutes="5"
-                  class="selected"
-                  aria-pressed="true"
-                >
-                  5 min</button
-                ><button type="button" data-minutes="15">15 min</button
-                ><button type="button" data-minutes="25">25 min</button>
-              </div>
-              <form id="duration-form">
-                <div class="duration-inputs">
-                  <label
-                    >Hours<input
-                      id="hours"
-                      type="number"
-                      value="0"
-                      min="0"
-                      max="99"
-                      step="1"
-                      inputmode="numeric"
-                      required /></label
-                  ><span>:</span
-                  ><label
-                    >Minutes<input
-                      id="minutes"
-                      type="number"
-                      value="5"
-                      min="0"
-                      max="59"
-                      step="1"
-                      inputmode="numeric"
-                      required /></label
-                  ><span>:</span
-                  ><label
-                    >Seconds<input
-                      id="seconds"
-                      type="number"
-                      value="0"
-                      min="0"
-                      max="59"
-                      step="1"
-                      inputmode="numeric"
-                      required
-                  /></label>
-                </div>
-                <button type="submit" class="apply-button">
-                  Apply custom time
-                  <svg
-                    viewBox="0 0 24 24"
-                    width="15"
-                    height="15"
-                    aria-hidden="true"
-                  >
-                    <path d="M6 18 18 6M6 6h12v12" />
-                  </svg>
-                </button>
-                <p
-                  id="duration-error"
-                  class="inline-error"
-                  role="alert"
-                  hidden
-                ></p>
-              </form>
-            </section>
-
-            <section
-              class="settings-card sound-card"
-              aria-labelledby="sound-heading"
-            >
-              <div class="section-heading">
-                <span class="section-number">02</span>
-                <h2 id="sound-heading">The grand finale</h2>
-              </div>
-              <p class="section-description">
-                A chicken with impeccable timing.
-              </p>
-              <div class="sound-choice">
-                <label
-                  ><input type="radio" name="sound" value="default" checked />
-                  Chicken alarm</label
-                ><label
-                  ><input type="radio" name="sound" value="local" /> Custom
-                  sound</label
-                >
-              </div>
-              <div id="default-option">
-                <div class="default-sound">
-                  <img src="chicken.svg" alt="" width="52" height="52" />
-                  <div>
-                    <strong>Screaming chickens</strong
-                    ><span>screaming-chickens.mp3</span>
-                  </div>
-                </div>
-                <p class="small-note">
-                  Built in and ready to go. No internet needed.
-                </p>
-              </div>
-              <div id="local-option" hidden>
-                <label class="file-picker"
-                  >Choose an audio file<input
-                    id="audio-file"
-                    type="file"
-                    accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac"
-                /></label>
-                <p id="file-name" class="file-name">
-                  MP3, WAV, or another browser-supported audio file.
-                </p>
-                <p class="small-note">
-                  The file stays on your device. Select it again after
-                  refreshing.
-                </p>
-              </div>
-              <div class="sound-tools">
-                <button type="button" id="test-sound" class="test-button">
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path
-                      d="m4 9 4 0 5-4v14l-5-4H4zM17 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"
-                    /></svg
-                  ><span>Test sound</span>
-                </button>
-              </div>
-              <p id="sound-status" class="small-note" role="status">
-                The chicken alarm is ready. Test the sound before your first
-                countdown.
-              </p>
-              <label class="volume-label" for="volume"
-                >Volume<span id="volume-value">80%</span></label
-              ><input
-                id="volume"
-                type="range"
-                min="10"
-                max="100"
-                value="80"
-                aria-label="Alarm volume"
-              />
-            </section>
-          </aside>
+            <input
+              id="duration-input"
+              class="time-editor"
+              type="text"
+              inputmode="numeric"
+              value="00:00"
+              maxlength="5"
+              autocomplete="off"
+              spellcheck="false"
+              aria-label="Duration, minutes and seconds"
+              aria-describedby="status-label duration-error"
+            />
+            <button
+              id="display-action"
+              class="display-action"
+              type="button"
+              aria-label="Pause timer"
+              hidden
+            ></button>
+          </div>
+          <p class="status-caption" id="status-label">
+            STOPPED · CLICK TO EDIT
+          </p>
+          <p class="duration-error" id="duration-error" role="alert" hidden></p>
         </div>
-        <p class="bottom-note">
-          <span aria-hidden="true">✦</span> Keep this tab open and your device
-          awake. Test the sound before your first countdown.
-        </p>
-      </main>
-      <footer>
-        <span>A small tool for your next big thing.</span
-        ><span>Made for a little peace. And a little poultry.</span>
-      </footer>
-    </div>
+      </section>
+      <section
+        class="control-dock"
+        id="control-dock"
+        aria-label="Timer controls"
+      >
+        <div class="dock-controls">
+          <div
+            class="timer-actions"
+            role="group"
+            aria-label="Countdown actions"
+          >
+            <button
+              id="start"
+              class="control-button"
+              type="button"
+              title="Start or resume (Space)"
+              disabled
+            >
+              <svg aria-hidden="true"><use href="#icon-play" /></svg
+              ><span>Start</span>
+            </button>
+            <button
+              id="pause"
+              class="control-button"
+              type="button"
+              title="Pause (Space)"
+              disabled
+            >
+              <svg aria-hidden="true"><use href="#icon-pause" /></svg
+              ><span>Pause</span>
+            </button>
+            <button
+              id="stop"
+              class="control-button"
+              type="button"
+              title="Stop and keep the remaining time"
+              disabled
+            >
+              <svg aria-hidden="true"><use href="#icon-stop" /></svg
+              ><span>Stop</span>
+            </button>
+            <button
+              id="reset"
+              class="control-button"
+              type="button"
+              title="Restore your original duration"
+              disabled
+            >
+              <svg aria-hidden="true"><use href="#icon-reset" /></svg
+              ><span>Reset</span>
+            </button>
+          </div>
+          <div
+            class="volume-controls dock-group"
+            role="group"
+            aria-label="Volume controls"
+          >
+            <button
+              id="mute"
+              class="speaker-button"
+              type="button"
+              aria-label="Mute sound"
+              aria-pressed="false"
+              title="Mute sound"
+            >
+              <svg aria-hidden="true"><use href="#icon-speaker" /></svg>
+            </button>
+            <input
+              id="volume"
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value="60"
+              aria-label="Alarm volume"
+            />
+            <output id="volume-value" for="volume">60%</output>
+          </div>
+          <div class="sound-controls dock-group" id="sound-controls">
+            <button
+              id="sound-selector"
+              class="sound-selector"
+              type="button"
+              aria-label="Alarm sound: chicken orchestra"
+              aria-haspopup="menu"
+              aria-expanded="false"
+              aria-controls="sound-menu"
+              title="chicken orchestra"
+            >
+              <svg aria-hidden="true"><use href="#icon-note" /></svg
+              ><span id="sound-name">chicken orchestra</span
+              ><svg class="chevron" aria-hidden="true">
+                <use href="#icon-chevron" />
+              </svg>
+            </button>
+            <div
+              id="sound-menu"
+              class="sound-menu"
+              role="menu"
+              aria-label="Alarm sound"
+              hidden
+            >
+              <button
+                id="default-sound"
+                type="button"
+                role="menuitemradio"
+                aria-checked="true"
+              >
+                <span>chicken orchestra</span
+                ><svg aria-hidden="true"><use href="#icon-check" /></svg>
+              </button>
+              <button
+                id="custom-sound"
+                type="button"
+                role="menuitemradio"
+                aria-checked="false"
+                hidden
+              >
+                <span></span
+                ><svg aria-hidden="true"><use href="#icon-check" /></svg>
+              </button>
+              <button id="choose-file" type="button" role="menuitem">
+                Choose file…
+              </button>
+            </div>
+            <input
+              id="audio-file"
+              type="file"
+              accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac"
+              aria-label="Choose an audio file"
+              hidden
+            />
+          </div>
+          <div
+            class="theme-controls dock-group"
+            role="group"
+            aria-label="Color theme"
+          >
+            <div class="theme-switch">
+              <button
+                id="theme-dark"
+                type="button"
+                data-theme="dark"
+                aria-pressed="true"
+              >
+                <svg aria-hidden="true"><use href="#icon-moon" /></svg
+                >Dark</button
+              ><button
+                id="theme-light"
+                type="button"
+                data-theme="light"
+                aria-pressed="false"
+              >
+                <svg aria-hidden="true"><use href="#icon-sun" /></svg>Light
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="dock-footer">
+          <p class="keyboard-hint">
+            <kbd>SPACE</kbd> Start / Pause / Resume
+            <span><kbd>ESC</kbd> Clear</span>
+          </p>
+          <p id="audio-message" class="audio-message" role="status" hidden></p>
+        </div>
+      </section>
+      <p id="announcer" class="sr-only" role="status" aria-live="polite"></p>
+    </main>
   </body>
 </html>
