@@ -8,6 +8,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "build": "node scripts/export.mjs",
     "start": "node server.js",
     "test": "node --test tests/*.test.js",
     "test:browser": "node --test tests/browser/*.test.js"
