@@ -2,7 +2,13 @@
 
 A local countdown instrument with an editable timer face, a quiet control dock, and a chicken-orchestra alarm. The interface follows the supplied countdown design kit and works offline.
 
-## Run locally
+## Portable two-file version
+
+Run `npm run build` to generate the portable version in `dist/`. Generated files are excluded from Git. Open `dist/chicken-countdown.html` directly in your browser by double-clicking it. Keep `screaming-chickens.mp3` in the same folder. Distribute those two files together; recipients need no Node.js, installation, terminal commands, server, or internet connection. The HTML embeds the styling, JavaScript, icon, font, and font license. Start the timer with a click or Space to enable audio playback.
+
+To regenerate the portable version after editing the source, the developer runs `npm run build`. Only this export step requires Node.js. You can also run `node scripts/export.mjs /path/to/output` to choose the export folder. Both files can be uploaded together to a static web host.
+
+## Run the development server
 
 Install Node.js 20 or newer, then run this from the project folder:
 
