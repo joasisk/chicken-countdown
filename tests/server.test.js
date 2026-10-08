@@ -1,0 +1,30 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createAppServer } from "../server.js";
+
+test("serves the complete app with browser-safe content types", async (t) => {
+  const server = createAppServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const index = await fetch(base);
+  assert.equal(index.status, 200);
+  assert.match(await index.text(), /id="timer-display"/);
+  const script = await fetch(`${base}/app.js`);
+  assert.match(script.headers.get("content-type"), /javascript/);
+  const sound = await fetch(`${base}/sounds/screaming-chickens.mp3`);
+  assert.equal(sound.status, 200);
+  assert.equal(sound.headers.get("content-type"), "audio/mpeg");
+  assert.ok((await sound.arrayBuffer()).byteLength > 0);
+  const missing = await fetch(`${base}/missing`);
+  assert.equal(missing.status, 404);
+  const protectedFile = await fetch(`${base}/%2e%2e%2fpackage.json`);
+  assert.equal(protectedFile.status, 403);
+  const malformed = await fetch(`${base}/%zz`);
+  assert.equal(malformed.status, 400);
+  const post = await fetch(base, { method: "POST" });
+  assert.equal(post.status, 405);
+  const head = await fetch(base, { method: "HEAD" });
+  assert.equal(head.status, 200);
+  assert.equal(await head.text(), "");
+});
