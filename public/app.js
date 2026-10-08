@@ -118,7 +118,10 @@ function render({ allowAlarm = true } = {}) {
   const { status, remaining } = timer.snapshot();
   const value =
     editing && status === "idle" ? editor.value : formatTime(remaining);
-  $("timer-display").textContent = value;
+  if ($("timer-display").textContent !== value) {
+    $("timer-display").textContent = value;
+    $("timer-glow").textContent = value;
+  }
   const [minutes, seconds] = formatTime(remaining).split(":").map(Number);
   $("timer-display").setAttribute(
     "aria-label",
@@ -162,6 +165,17 @@ function render({ allowAlarm = true } = {}) {
     (status === "running" || status === "paused") &&
     remaining > 0 &&
     remaining <= 10_000;
+  if (
+    warning &&
+    status === "running" &&
+    !$("timer-face").classList.contains("pulsing")
+  ) {
+    // Align each glow peak with the next displayed second, including after a pause.
+    $("timer-face").style.setProperty(
+      "--pulse-delay",
+      `${-((1000 - (remaining % 1000)) % 1000)}ms`,
+    );
+  }
   $("timer-face").classList.toggle("warning", warning || status === "finished");
   $("timer-face").classList.toggle("pulsing", warning && status === "running");
   $("timer-face").dataset.state = status;
@@ -525,6 +539,51 @@ $("audio-file").addEventListener("change", async () => {
   }
 });
 
+function setupFullscreenDock() {
+  // Chromium also updates this query for browser full screen (F11).
+  const displayMode = matchMedia("(display-mode: fullscreen)");
+  const dock = $("control-dock");
+  let fullscreen = false;
+  let idleTimeout;
+
+  function hideWhenIdle() {
+    const focused = document.activeElement;
+    if (
+      dock.matches(":hover") ||
+      (dock.contains(focused) && focused.matches(":focus-visible")) ||
+      dock.classList.contains("menu-open") ||
+      dock.classList.contains("dragging") ||
+      !$("audio-message").hidden
+    ) {
+      idleTimeout = setTimeout(hideWhenIdle, 2500);
+      return;
+    }
+    document.body.classList.add("fullscreen-idle");
+  }
+  function reveal() {
+    clearTimeout(idleTimeout);
+    document.body.classList.remove("fullscreen-idle");
+    if (fullscreen) idleTimeout = setTimeout(hideWhenIdle, 2500);
+  }
+  function syncMode() {
+    fullscreen = displayMode.matches || Boolean(document.fullscreenElement);
+    reveal();
+  }
+
+  displayMode.addEventListener("change", syncMode);
+  document.addEventListener("fullscreenchange", syncMode);
+  document.addEventListener("pointermove", reveal, { passive: true });
+  document.addEventListener("pointerdown", reveal, { passive: true });
+  document.addEventListener("focusin", (event) => {
+    if (dock.contains(event.target)) reveal();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Tab") reveal();
+  });
+  window.addEventListener("pagehide", () => clearTimeout(idleTimeout));
+  syncMode();
+}
+
 if (preferences.customName) {
   showAudioMessage("Custom sound unavailable. Using chicken orchestra.");
   preferences.customName = null;
@@ -534,6 +593,7 @@ audio.setVolume(preferences.volume / 100);
 audio.setMuted(preferences.muted);
 renderSettings();
 render();
+setupFullscreenDock();
 setInterval(render, 100);
 document.addEventListener("visibilitychange", () => render());
 window.addEventListener("pagehide", () => {

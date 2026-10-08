@@ -144,11 +144,12 @@ button svg {
   font-size: var(--timer-size);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  line-height: 0.8;
+  line-height: 1;
   letter-spacing: 0;
   font-feature-settings: "tnum" 1;
 }
-.time-value {
+.time-value,
+.time-glow {
   min-width: 2.14em;
   white-space: pre;
   background: linear-gradient(var(--digit-top) 15%, var(--digit-bottom) 85%);
@@ -157,6 +158,15 @@ button svg {
   color: transparent;
   pointer-events: none;
   user-select: none;
+}
+.time-glow {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(
+    var(--warning-top) 15%,
+    var(--warning-bottom) 85%
+  );
+  opacity: 0;
 }
 .time-editor {
   position: absolute;
@@ -218,37 +228,49 @@ button svg {
   width: 100%;
   margin: 12px 0 0;
 }
-.warning .time-value {
-  background-image: linear-gradient(
-    var(--warning-top) 15%,
-    var(--warning-bottom) 85%
-  );
+.warning .time-glow {
+  opacity: 0.94;
+  filter:
+    drop-shadow(
+      0 0 0.025em color-mix(in srgb, var(--warning-solid) 60%, transparent)
+    )
+    drop-shadow(
+      0 0 0.09em color-mix(in srgb, var(--warning-solid) 35%, transparent)
+    );
 }
-.pulsing .time-value {
-  animation: warning-pulse 1s ease-in-out infinite;
+.pulsing .time-glow {
+  animation: warning-pulse 1s ease-out infinite;
+  animation-delay: var(--pulse-delay, 0ms);
+  will-change: opacity;
 }
 @keyframes warning-pulse {
   0%,
   100% {
-    opacity: 1;
-    filter: drop-shadow(
-      0 0 8px color-mix(in srgb, var(--warning-solid) 10%, transparent)
-    );
+    opacity: 0.94;
   }
-  50% {
-    opacity: 0.9;
-    filter: drop-shadow(
-      0 0 3px color-mix(in srgb, var(--warning-solid) 3%, transparent)
-    );
+  60% {
+    opacity: 0.18;
   }
 }
 .control-dock {
   flex-shrink: 0;
   width: 100%;
+  max-width: 1180px;
+  align-self: center;
   position: relative;
   padding: 14px 16px 12px;
-  border: 1px solid color-mix(in srgb, var(--edge) 45%, transparent);
+  border: 1px solid transparent;
   border-radius: 12px;
+  isolation: isolate;
+}
+.control-dock::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--edge) 45%, transparent);
+  border-radius: inherit;
   background: linear-gradient(
     165deg,
     color-mix(in srgb, var(--dock-top) 45%, var(--page-bottom)),
@@ -256,14 +278,15 @@ button svg {
   );
   box-shadow: 0 3px 12px #00000008;
   transition:
+    opacity 650ms,
     background 250ms 300ms,
     border-color 250ms 300ms,
     box-shadow 250ms 300ms;
 }
-.control-dock:hover,
-.control-dock:focus-within,
-.control-dock.menu-open,
-.control-dock.dragging {
+.control-dock:hover::before,
+.control-dock:focus-within::before,
+.control-dock.menu-open::before,
+.control-dock.dragging::before {
   background: linear-gradient(var(--dock-top), var(--dock-bottom));
   border-color: var(--edge);
   box-shadow:
@@ -275,8 +298,9 @@ button svg {
 .dock-controls {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 16px;
+  transition: opacity 180ms;
 }
 .timer-actions {
   display: flex;
@@ -519,6 +543,7 @@ button svg {
   font-size: 12px;
   line-height: 18px;
   letter-spacing: 0.3px;
+  transition: opacity 650ms;
 }
 .keyboard-hint > span {
   margin-left: 25px;
@@ -534,6 +559,21 @@ kbd {
   color: var(--support);
   margin: 0;
   max-width: 480px;
+  transition: opacity 180ms;
+}
+.fullscreen-idle .control-dock::before,
+.fullscreen-idle .dock-controls,
+.fullscreen-idle .audio-message {
+  opacity: 0;
+  transition-duration: 650ms;
+  transition-delay: 0ms;
+}
+.fullscreen-idle .dock-controls {
+  pointer-events: none;
+}
+.fullscreen-idle .keyboard-hint {
+  opacity: 0.2;
+  text-shadow: 0 1px 0 color-mix(in srgb, var(--digit-top) 30%, transparent);
 }
 .sr-only {
   position: absolute;
@@ -766,7 +806,7 @@ kbd {
   }
 }
 @media (hover: none) {
-  .control-dock {
+  .control-dock::before {
     background: linear-gradient(var(--dock-top), var(--dock-bottom));
     border-color: var(--edge);
     box-shadow: var(--shadow);

@@ -44,17 +44,17 @@ test("instrument interface works in Chromium without external services", async (
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}`;
 
-  async function open({
-    mobile = false,
-    reducedMotion = "no-preference",
-  } = {}) {
+  async function open(
+    testContext,
+    { mobile = false, reducedMotion = "no-preference" } = {},
+  ) {
     const context = await browser.newContext({
       viewport: mobile
         ? { width: 390, height: 844 }
         : { width: 1280, height: 800 },
       reducedMotion,
     });
-    t.after(() => context.close());
+    testContext.after(() => context.close());
     await context.route("**/*", (route) =>
       route.request().url().startsWith(base) ||
       /^(blob:|data:)/.test(route.request().url())
@@ -122,8 +122,8 @@ test("instrument interface works in Chromium without external services", async (
 
   await t.test(
     "first-use values, masked typing, paste, validation and fixed geometry",
-    async () => {
-      const { page, errors } = await open();
+    async (t) => {
+      const { page, errors } = await open(t);
       assert.equal(await page.locator("#timer-display").textContent(), "00:00");
       assert.equal(
         await page.locator("html").getAttribute("data-theme"),
@@ -178,8 +178,8 @@ test("instrument interface works in Chromium without external services", async (
 
   await t.test(
     "Stop preserves the remainder and unchanged editing preserves Reset's original value",
-    async () => {
-      const { page, errors } = await open();
+    async (t) => {
+      const { page, errors } = await open(t);
       await setTime(page, "25:00");
       await page.locator("#start").click();
       await advance(page, 746_250);
@@ -200,8 +200,8 @@ test("instrument interface works in Chromium without external services", async (
 
   await t.test(
     "display single clicks pause/resume and double clicks reset without a delayed toggle",
-    async () => {
-      const { page, errors } = await open();
+    async (t) => {
+      const { page, errors } = await open(t);
       await setTime(page, "25:00");
       await page.locator("#start").click();
       await advance(page, 30_000);
@@ -230,8 +230,8 @@ test("instrument interface works in Chromium without external services", async (
 
   await t.test(
     "global Space and Escape work from editor, volume, menu and theme focus",
-    async () => {
-      const { page, errors } = await open();
+    async (t) => {
+      const { page, errors } = await open(t);
       await page.locator("#duration-input").fill("00:30");
       await page.locator("#duration-input").press("Space");
       await waitState(page, "running");
@@ -264,8 +264,8 @@ test("instrument interface works in Chromium without external services", async (
 
   await t.test(
     "final-ten-second warning, paused warning, light theme and real MP3 alarm once",
-    async () => {
-      const { page, errors } = await open();
+    async (t) => {
+      const { page, errors } = await open(t);
       await setTime(page, "00:11");
       await page.locator("#start").click();
       assert.equal(
@@ -333,8 +333,8 @@ test("instrument interface works in Chromium without external services", async (
 
   await t.test(
     "mute, zero volume and preferences persist without changing the countdown",
-    async () => {
-      const { page, errors } = await open();
+    async (t) => {
+      const { page, errors } = await open(t);
       await page.locator("#volume").fill("35");
       await page.locator("#mute").click();
       assert.equal(await page.locator("#volume-value").textContent(), "Muted");
@@ -365,8 +365,8 @@ test("instrument interface works in Chromium without external services", async (
 
   await t.test(
     "valid custom audio replaces the sound during a run; invalid and cancelled choices preserve it",
-    async () => {
-      const { page, errors } = await open();
+    async (t) => {
+      const { page, errors } = await open(t);
       await setTime(page, "00:30");
       await page.locator("#start").click();
       const name = "my-very-long-custom-countdown-alarm.wav";
@@ -439,8 +439,8 @@ test("instrument interface works in Chromium without external services", async (
 
   await t.test(
     "Stop, Reset and Escape at the deadline suppress a pending completion alarm",
-    async () => {
-      const { page, errors } = await open();
+    async (t) => {
+      const { page, errors } = await open(t);
       for (const action of ["stop", "reset", "escape"]) {
         await setTime(page, "00:01");
         await page.locator("#start").click();
@@ -464,9 +464,230 @@ test("instrument interface works in Chromium without external services", async (
   );
 
   await t.test(
+    "wide-screen digits fit their paint bounds and the centered dock stays compact",
+    async (t) => {
+      const { page, errors } = await open(t);
+      for (const viewport of [
+        { width: 1920, height: 1080 },
+        { width: 2551, height: 1430 },
+      ]) {
+        await page.setViewportSize(viewport);
+        for (const value of ["00:00", "11:11", "99:59"]) {
+          await setTime(page, value);
+          const ink = await page.locator("#timer-display").evaluate((el) => {
+            const style = getComputedStyle(el);
+            const context = document.createElement("canvas").getContext("2d");
+            context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+            const metrics = context.measureText(el.textContent);
+            const range = new Range();
+            range.selectNodeContents(el);
+            const baseline =
+              range.getBoundingClientRect().top + metrics.fontBoundingBoxAscent;
+            const box = el.getBoundingClientRect();
+            return {
+              top: baseline - metrics.actualBoundingBoxAscent,
+              bottom: baseline + metrics.actualBoundingBoxDescent,
+              paintTop: box.top,
+              paintBottom: box.bottom,
+            };
+          });
+          assert.ok(ink.top >= ink.paintTop, `${value} is clipped at the top`);
+          assert.ok(
+            ink.bottom < ink.paintBottom,
+            `${value} is clipped at the bottom`,
+          );
+        }
+        const dock = await page.locator("#control-dock").boundingBox();
+        assert.ok(dock.width <= 1180);
+        assert.ok(Math.abs(dock.x + dock.width / 2 - viewport.width / 2) < 1);
+        const groups = await page
+          .locator(".dock-controls > div")
+          .evaluateAll((elements) =>
+            elements.map((el) => ({
+              left: el.getBoundingClientRect().left,
+              right: el.getBoundingClientRect().right,
+            })),
+          );
+        for (let i = 1; i < groups.length; i++) {
+          const gap = groups[i].left - groups[i - 1].right;
+          assert.ok(gap >= 0 && gap <= 17, `Unexpected dock gap: ${gap}`);
+        }
+        assert.equal(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+          true,
+        );
+        await screenshot(page, `wide-${viewport.width}`);
+      }
+      assert.deepEqual(errors, []);
+    },
+  );
+
+  await t.test(
+    "warning pulses a separate glow over the original digits every second in both themes",
+    async (t) => {
+      const { page, errors } = await open(t);
+      for (const theme of ["dark", "light"]) {
+        await page.locator(`#theme-${theme}`).click();
+        await setTime(page, "00:11");
+        const base = await page
+          .locator("#timer-display")
+          .evaluate((el) => getComputedStyle(el).backgroundImage);
+        assert.equal(
+          await page
+            .locator("#timer-glow")
+            .evaluate((el) => getComputedStyle(el).opacity),
+          "0",
+        );
+        await page.locator("#start").click();
+        await advance(page, 1000);
+        await page.waitForFunction(() =>
+          document.getElementById("timer-face").classList.contains("pulsing"),
+        );
+        const phases = await page.locator("#timer-glow").evaluate((el) => {
+          const animation = el.getAnimations()[0];
+          animation.pause();
+          const samples = [0, 600, 1000].map((time) => {
+            animation.currentTime = time;
+            const style = getComputedStyle(el);
+            return { opacity: Number(style.opacity), filter: style.filter };
+          });
+          return { duration: animation.effect.getTiming().duration, samples };
+        });
+        assert.equal(phases.duration, 1000);
+        assert.ok(phases.samples[0].opacity > 0.8);
+        assert.ok(phases.samples[1].opacity < 0.25);
+        assert.equal(phases.samples[0].opacity, phases.samples[2].opacity);
+        assert.match(phases.samples[0].filter, /drop-shadow/);
+        assert.equal(
+          await page
+            .locator("#timer-display")
+            .evaluate((el) => getComputedStyle(el).backgroundImage),
+          base,
+        );
+        assert.equal(
+          await page
+            .locator("#timer-display")
+            .evaluate((el) => getComputedStyle(el).opacity),
+          "1",
+        );
+        assert.equal(
+          await page.locator("#timer-glow").getAttribute("aria-hidden"),
+          "true",
+        );
+        assert.equal(await page.locator("#timer-glow").textContent(), "00:10");
+        assert.deepEqual(
+          await page.locator("#timer-glow").boundingBox(),
+          await page.locator("#timer-display").boundingBox(),
+        );
+        await page.locator("#pause").click();
+        assert.equal(
+          await page
+            .locator("#timer-glow")
+            .evaluate((el) => el.getAnimations().length),
+          0,
+        );
+        assert.ok(
+          Number(
+            await page
+              .locator("#timer-glow")
+              .evaluate((el) => getComputedStyle(el).opacity),
+          ) > 0.8,
+        );
+        await page.locator("#stop").click();
+      }
+      assert.deepEqual(errors, []);
+    },
+  );
+
+  await t.test(
+    "full-screen idle fade leaves faint shortcuts and restores controls for pointer and keyboard use",
+    async (t) => {
+      const { page, errors } = await open(t);
+      await setTime(page, "00:30");
+      await page.mouse.move(0, 0);
+      await page.evaluate(() => document.documentElement.requestFullscreen());
+      await page.waitForFunction(() => document.fullscreenElement);
+      await page.waitForFunction(
+        () =>
+          getComputedStyle(document.querySelector(".dock-controls")).opacity ===
+          "0",
+      );
+      assert.equal(
+        await page
+          .locator("#control-dock")
+          .evaluate((el) => getComputedStyle(el, "::before").opacity),
+        "0",
+      );
+      const hintOpacity = Number(
+        await page
+          .locator(".keyboard-hint")
+          .evaluate((el) => getComputedStyle(el).opacity),
+      );
+      assert.ok(hintOpacity > 0 && hintOpacity <= 0.25);
+      await screenshot(page, "fullscreen-idle");
+      await page.keyboard.press("Space");
+      await waitState(page, "running");
+      assert.equal(
+        await page
+          .locator("body")
+          .evaluate((el) => el.classList.contains("fullscreen-idle")),
+        true,
+      );
+      await page.keyboard.press("Space");
+      await waitState(page, "paused");
+      await page.mouse.move(200, 200);
+      await page.waitForFunction(
+        () =>
+          getComputedStyle(document.querySelector(".dock-controls")).opacity ===
+          "1",
+      );
+      await page.waitForFunction(() =>
+        document.body.classList.contains("fullscreen-idle"),
+      );
+      await page.keyboard.press("Tab");
+      await page.keyboard.press("Tab");
+      await page.waitForTimeout(3300);
+      assert.equal(
+        await page
+          .locator("body")
+          .evaluate((el) => el.classList.contains("fullscreen-idle")),
+        false,
+      );
+      await page.locator("#sound-selector").click();
+      await page.mouse.move(0, 0);
+      await page.waitForTimeout(3300);
+      assert.equal(await page.locator("#sound-menu").isVisible(), true);
+      assert.equal(
+        await page
+          .locator("body")
+          .evaluate((el) => el.classList.contains("fullscreen-idle")),
+        false,
+      );
+      await page.evaluate(() => document.exitFullscreen());
+      await page.waitForFunction(() => !document.fullscreenElement);
+      await page.waitForTimeout(3300);
+      assert.equal(
+        await page
+          .locator("body")
+          .evaluate((el) => el.classList.contains("fullscreen-idle")),
+        false,
+      );
+      assert.equal(
+        await page
+          .locator(".keyboard-hint")
+          .evaluate((el) => getComputedStyle(el).opacity),
+        "1",
+      );
+      assert.deepEqual(errors, []);
+    },
+  );
+
+  await t.test(
     "reduced motion and responsive dock keep the timer and controls visible",
-    async () => {
-      const { page, errors } = await open({
+    async (t) => {
+      const { page, errors } = await open(t, {
         mobile: true,
         reducedMotion: "reduce",
       });
@@ -474,7 +695,7 @@ test("instrument interface works in Chromium without external services", async (
       await page.locator("#start").click();
       assert.equal(
         await page
-          .locator("#timer-display")
+          .locator("#timer-glow")
           .evaluate((el) => getComputedStyle(el).animationName),
         "none",
       );

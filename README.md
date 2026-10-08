@@ -26,7 +26,7 @@ The first-use display is **00:00**, with Dark selected and volume at 60%. Click 
 - **Stop** keeps the remainder editable and preserves the original duration. **Reset** restores that original duration. Focusing an unchanged stopped remainder does not overwrite the original.
 - Click running digits to pause; click paused digits to resume. Double-click running digits to stop and restore the original duration.
 - **Space** starts, pauses, or resumes, even when another app control has focus. **Escape** cancels the timer and alarm and clears both the original and remaining duration to zero.
-- The last ten seconds turn red and gently pulse. Pausing stops the pulse; reduced-motion preferences show steady red. At zero, the timer stays red, announces completion, and plays the selected sound once unless muted.
+- During the last ten seconds, a red glow pulses over the original digit color once per second. Pausing stops the pulse; reduced-motion preferences show a steady glow. At zero, the timer stays red, announces completion, and plays the selected sound once unless muted.
 
 Keep the tab open and your device awake. The timer uses a deadline to account for background-tab delays; browser or operating-system suspension can postpone the alarm until the app wakes. Refreshing clears the countdown.
 
@@ -36,7 +36,7 @@ The sound menu defaults to **chicken orchestra**, using the bundled `public/soun
 
 The volume slider supports 0–100%, and mute is a separate control. Unmuting restores the last nonzero level. Muting silences any current alarm immediately. Theme, volume, and mute preferences are remembered when browser storage is available. Custom audio stays on your device and is never uploaded; select it again after refreshing. The app explains when an unavailable custom sound is replaced by chicken orchestra.
 
-Dark and Light change the palette immediately without changing the timer or sound. All controls remain available in the bottom dock, which rearranges into rows on narrow screens. Keyboard focus remains visible even when the dock is resting.
+Dark and Light change the palette immediately without changing the timer or sound. The bottom dock stays compact and centered on wide screens and rearranges into rows on narrow screens. In full screen (F11), it fades after 2.5 seconds of inactivity, leaving a faint engraved-style keyboard hint. Moving the pointer or tabbing restores the controls. Hovering over the dock, focusing a control with the keyboard, or opening its sound menu keeps it visible.
 
 ## Development and checks
 
