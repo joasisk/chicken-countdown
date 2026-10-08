@@ -562,14 +562,16 @@ kbd {
   transition: opacity 180ms;
 }
 .fullscreen-idle .control-dock::before,
-.fullscreen-idle .dock-controls,
-.fullscreen-idle .audio-message {
+.fullscreen-idle .dock-controls {
   opacity: 0;
   transition-duration: 650ms;
   transition-delay: 0ms;
 }
 .fullscreen-idle .dock-controls {
   pointer-events: none;
+}
+.fullscreen-idle .audio-message {
+  display: none;
 }
 .fullscreen-idle .keyboard-hint {
   opacity: 0.2;

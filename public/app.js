@@ -547,13 +547,9 @@ function setupFullscreenDock() {
   let idleTimeout;
 
   function hideWhenIdle() {
-    const focused = document.activeElement;
     if (
-      dock.matches(":hover") ||
-      (dock.contains(focused) && focused.matches(":focus-visible")) ||
       dock.classList.contains("menu-open") ||
-      dock.classList.contains("dragging") ||
-      !$("audio-message").hidden
+      dock.classList.contains("dragging")
     ) {
       idleTimeout = setTimeout(hideWhenIdle, 2500);
       return;
@@ -566,7 +562,9 @@ function setupFullscreenDock() {
     if (fullscreen) idleTimeout = setTimeout(hideWhenIdle, 2500);
   }
   function syncMode() {
+    const wasFullscreen = fullscreen;
     fullscreen = displayMode.matches || Boolean(document.fullscreenElement);
+    if (fullscreen && !wasFullscreen) closeMenu();
     reveal();
   }
 
@@ -578,14 +576,13 @@ function setupFullscreenDock() {
     if (dock.contains(event.target)) reveal();
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Tab") reveal();
+    if (event.key === "Tab" || dock.contains(event.target)) reveal();
   });
   window.addEventListener("pagehide", () => clearTimeout(idleTimeout));
   syncMode();
 }
 
 if (preferences.customName) {
-  showAudioMessage("Custom sound unavailable. Using chicken orchestra.");
   preferences.customName = null;
   savePreferences();
 }

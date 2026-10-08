@@ -429,9 +429,16 @@ test("instrument interface works in Chromium without external services", async (
         await page.locator("#sound-name").textContent(),
         "chicken orchestra",
       );
+      assert.equal(await page.locator("#audio-message").isVisible(), false);
+      assert.equal(await page.locator("#audio-message").textContent(), "");
+      assert.equal(
+        await page.locator("#default-sound").getAttribute("aria-checked"),
+        "true",
+      );
+      assert.equal(await page.locator("#custom-sound").isVisible(), false);
       assert.match(
-        await page.locator("#audio-message").textContent(),
-        /Custom sound unavailable/,
+        await page.evaluate(() => window.__alarmAudio.src),
+        /screaming-chickens\.mp3$/,
       );
       assert.deepEqual(errors, []);
     },
@@ -606,13 +613,35 @@ test("instrument interface works in Chromium without external services", async (
     async (t) => {
       const { page, errors } = await open(t);
       await setTime(page, "00:30");
-      await page.mouse.move(0, 0);
+      await page.locator("#audio-file").setInputFiles({
+        name: "invalid.mp3",
+        mimeType: "audio/mpeg",
+        buffer: Buffer.from("not audio"),
+      });
+      await page.waitForFunction(() =>
+        document
+          .getElementById("audio-message")
+          .textContent.includes("cannot be played"),
+      );
+      // Reproduce entering full screen with a message, a parked pointer, and keyboard focus.
+      await page.locator("#theme-light").focus();
+      const button = await page.locator("#theme-light").boundingBox();
+      await page.mouse.move(
+        button.x + button.width / 2,
+        button.y + button.height / 2,
+      );
       await page.evaluate(() => document.documentElement.requestFullscreen());
       await page.waitForFunction(() => document.fullscreenElement);
       await page.waitForFunction(
         () =>
           getComputedStyle(document.querySelector(".dock-controls")).opacity ===
           "0",
+      );
+      assert.equal(await page.locator("#audio-message").isVisible(), false);
+      const hint = await page.locator(".keyboard-hint").boundingBox();
+      const dock = await page.locator("#control-dock").boundingBox();
+      assert.ok(
+        Math.abs(hint.x + hint.width / 2 - (dock.x + dock.width / 2)) < 1,
       );
       assert.equal(
         await page
@@ -648,12 +677,33 @@ test("instrument interface works in Chromium without external services", async (
       );
       await page.keyboard.press("Tab");
       await page.keyboard.press("Tab");
+      await page.waitForFunction(
+        () =>
+          getComputedStyle(document.querySelector(".dock-controls")).opacity ===
+          "1",
+      );
       await page.waitForTimeout(3300);
       assert.equal(
         await page
           .locator("body")
           .evaluate((el) => el.classList.contains("fullscreen-idle")),
-        false,
+        true,
+      );
+      await page.locator("#volume").focus();
+      await page.waitForFunction(
+        () =>
+          getComputedStyle(document.querySelector(".dock-controls")).opacity ===
+          "1",
+      );
+      await page.waitForFunction(() =>
+        document.body.classList.contains("fullscreen-idle"),
+      );
+      await page.keyboard.press("ArrowRight");
+      assert.equal(await page.locator("#volume").inputValue(), "61");
+      await page.waitForFunction(
+        () =>
+          getComputedStyle(document.querySelector(".dock-controls")).opacity ===
+          "1",
       );
       await page.locator("#sound-selector").click();
       await page.mouse.move(0, 0);
