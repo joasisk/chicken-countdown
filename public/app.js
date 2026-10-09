@@ -346,8 +346,7 @@ new ResizeObserver(positionAgendaSelection).observe(agendaEditor);
 document.fonts.ready.then(positionAgendaSelection);
 
 function navigateAgenda(offset) {
-  // Do not reconcile a running deadline here: only a rendered natural expiry
-  // may grant navigation. The model repeats the guard used by disabled keys.
+  // Navigation can end an item early and loads the adjacent item ready to start.
   const duration = agenda.navigate(offset, timer.status, timer.remaining);
   if (duration === null) return;
   cancelClick();

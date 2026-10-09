@@ -47,26 +47,30 @@ test("commits are atomic, unchanged drafts retain time, and totals exceed two di
   assert.equal(agenda.activeIndex, null);
 });
 
-test("only natural expiry permits one adjacent navigation, with guards inside handlers", () => {
-  const agenda = new Agenda({ text: "00:01 First\n00:02 Second\n00:03 Last", activeIndex: 0 });
-  for (const status of ["idle", "stopped", "running", "paused"]) {
-    assert.deepEqual(agenda.permissions(status, 0), { previous: false, next: false, eject: false });
-    assert.equal(agenda.navigate(1, status, 0), null);
-    assert.equal(agenda.eject(status, 0), false);
+test("navigation is always enabled, stays adjacent, and eject only blocks running", () => {
+  for (const status of ["idle", "running", "paused", "finished"]) {
+    for (const remaining of [0, 500]) {
+      const agenda = new Agenda({ text: "00:01 First\n00:02 Second\n00:03 Last", activeIndex: 0 });
+      assert.deepEqual(agenda.permissions(status, remaining), {
+        previous: true, next: true, eject: status !== "running",
+      });
+      assert.equal(agenda.navigate(-1, status, remaining), null);
+      assert.equal(agenda.navigate(2, status, remaining), null);
+      assert.equal(agenda.navigate(1, status, remaining), 2000);
+      assert.equal(agenda.navigate(1, status, remaining), 3000);
+      assert.equal(agenda.navigate(1, status, remaining), null);
+      assert.equal(agenda.navigate(-1, status, remaining), 2000);
+      assert.equal(agenda.editingUnlocked, false);
+      const saved = agenda.saved();
+      assert.equal(agenda.eject(status, remaining), status !== "running");
+      assert.deepEqual(agenda.saved(), status === "running" ? saved : { text: "", activeIndex: null });
+    }
   }
-  assert.equal(agenda.navigate(1, "finished", 1), null);
-  assert.equal(agenda.navigate(-1, "finished", 0), null);
-  assert.equal(agenda.navigate(2, "finished", 0), null);
-  assert.equal(agenda.navigate(1, "finished", 0), 2000);
-  assert.equal(agenda.navigate(1, "idle", 2000), null);
-  assert.equal(agenda.editingUnlocked, false);
-  assert.equal(agenda.navigate(1, "finished", 0), 3000);
-  assert.equal(agenda.permissions("finished", 0).next, false);
-  assert.equal(agenda.navigate(-1, "finished", 0), 2000);
-  assert.equal(agenda.eject("finished", 0), true);
-  assert.equal(agenda.visible, true);
-  assert.deepEqual(agenda.saved(), { text: "", activeIndex: null });
-  assert.equal(agenda.totalSeconds, 0);
+  const empty = new Agenda();
+  assert.deepEqual(empty.permissions("idle"), { previous: true, next: true, eject: true });
+  assert.equal(empty.navigate(1, "idle", 0), null);
+  assert.equal(empty.navigate(-1, "idle", 0), null);
+  assert.equal(empty.eject("idle", 0), true);
 });
 
 test("reload restores only validated committed entries and clamps the selection", () => {

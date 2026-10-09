@@ -73,18 +73,18 @@ export class Agenda {
     }
   }
 
-  permissions(status, remaining) {
-    const eligible = status === "finished" && remaining === 0 && this.activeIndex !== null && this.entries.length > 0;
+  permissions(status) {
     return {
-      previous: eligible && this.activeIndex > 0,
-      next: eligible && this.activeIndex < this.entries.length - 1,
-      eject: eligible,
+      previous: true,
+      next: true,
+      eject: status !== "running",
     };
   }
 
   navigate(offset, status, remaining) {
-    const permissions = this.permissions(status, remaining);
-    if ((offset !== -1 && offset !== 1) || !(offset === -1 ? permissions.previous : permissions.next)) return null;
+    if ((offset !== -1 && offset !== 1) || this.activeIndex === null) return null;
+    const nextIndex = this.activeIndex + offset;
+    if (nextIndex < 0 || nextIndex >= this.entries.length) return null;
     this.activeIndex += offset;
     this.lock();
     return this.selectedDuration;

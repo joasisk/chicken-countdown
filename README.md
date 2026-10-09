@@ -47,7 +47,7 @@ Each duration must be exactly `MM:SS`, from `00:01` to `99:59`, followed by a sp
 
 Malformed drafts remain visible with line-specific errors and retain the last valid agenda. Even a hidden invalid draft blocks Start and reopens the display. Fix it after Stop, or discard it with Reset/Escape. Editing to empty text clears the list.
 
-**Previous / Eject / Next** are available only after the countdown naturally expires. Previous/Next select one adjacent item, silence the alarm, load its planned duration, and immediately disable all three keys until another expiration. Press Start to begin that item. Eject clears the agenda and timer while keeping the panel visible and locked. There is no automatic advance.
+**Previous / Next** are always available, including while running or paused. They select one adjacent item, stop the current countdown, silence the alarm, and load the item's planned duration. Press Start to begin that item. At either end of the list, or with an empty agenda, navigation does nothing. **Eject** is disabled only while the timer is running; it clears the agenda and timer while keeping the panel visible and locked. There is no automatic advance.
 
 The display is a native textarea with selection, copy/paste, and undo. **Space** types a normal space while this field has focus; use **Enter** to add a line. The timer's Space shortcut applies outside this field. **Escape** still clears the timer and discards pending agenda edits while preserving saved entries. Moving the caret does not change the selected meeting item. Long titles wrap beneath their title column and long lists scroll inside the black glass. The saved agenda and selected item persist with preferences; drafts, visibility, and the editing latch do not persist.
 
@@ -75,6 +75,6 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-The tests automatically use `/usr/bin/chromium` when available; set `CHROMIUM_PATH` for another installed Chromium executable. They cover masked input, Stop/Reset semantics, pointer and keyboard controls, actual MP3/custom-file playback, invalid-file handling, preferences, final-ten-second warnings, reduced motion, responsive layouts, strict agenda parsing, draft validation, expiry-only transport, Unicode editing, and agenda persistence. They block external requests. `SCREENSHOT_DIR=/tmp/countdown-screens npm run test:browser` also saves reference screenshots.
+The tests automatically use `/usr/bin/chromium` when available; set `CHROMIUM_PATH` for another installed Chromium executable. They cover masked input, Stop/Reset semantics, pointer and keyboard controls, actual MP3/custom-file playback, invalid-file handling, preferences, final-ten-second warnings, reduced motion, responsive layouts, strict agenda parsing, draft validation, navigation during running and paused countdowns, eject availability, Unicode editing, and agenda persistence. They block external requests. `SCREENSHOT_DIR=/tmp/countdown-screens npm run test:browser` also saves reference screenshots.
 
 The app binds to `127.0.0.1` by default. `HOST` and `PORT` are optional. No credentials or external services are required. The self-hosted Barlow Condensed and VT323 fonts are distributed under the SIL Open Font License; see `public/fonts/OFL.txt` and `public/fonts/VT323-OFL.txt`.

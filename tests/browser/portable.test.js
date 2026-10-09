@@ -57,7 +57,7 @@ test("two-file export runs and plays its alarm over file://", async (t) => {
   await page.waitForFunction(() => document.getElementById("timer-face").dataset.state === "finished");
   await page.locator("#agenda-next").click();
   assert.equal(await page.locator("#timer-display").textContent(), "00:02");
-  assert.equal(await page.locator("#agenda-next").isDisabled(), true);
+  assert.equal(await page.locator("#agenda-next").isEnabled(), true);
   await page.keyboard.press("Escape");
   await page.locator("#duration-input").fill("00:02");
   await page.locator("#start").click();
@@ -119,6 +119,6 @@ test("portable export includes the agenda and both fonts without source assets",
   await page.waitForFunction(() => document.getElementById("timer-face").dataset.state === "finished");
   await page.locator("#agenda-next").click();
   assert.equal(await page.locator("#timer-display").textContent(), "00:02");
-  assert.equal(await page.locator("#agenda-next").isDisabled(), true);
+  assert.equal(await page.locator("#agenda-next").isEnabled(), true);
   assert.deepEqual(errors, []);
 });

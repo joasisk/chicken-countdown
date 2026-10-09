@@ -814,7 +814,7 @@ test("instrument interface works in Chromium without external services", async (
     assert.equal(await input.getAttribute('readonly'), '');
     assert.equal(await page.locator('#stop').isEnabled(), true);
     assert.equal(await page.locator('#agenda-hint').textContent(), 'PRESS STOP TO EDIT');
-    await assertTransport(page, false, false, false);
+    await assertTransport(page, true, true, true);
     await page.locator('#stop').click();
     assert.equal(await input.evaluate(el => el === document.activeElement), true);
     await input.fill('05:00 Welcome\n10:00 Discussion\n08:00 Decisions\n02:00 Wrap-up');
@@ -853,7 +853,7 @@ test("instrument interface works in Chromium without external services", async (
     await page.locator('#agenda-toggle').click();
     await page.locator('#pause').click();
     assert.equal(await input.evaluate(el => el.readOnly), true);
-    await assertTransport(page, false, false, false);
+    await assertTransport(page, true, true, true);
     await page.locator('#stop').click();
     await input.blur();
     assert.equal(await page.locator('#timer-display').textContent(), '04:30');
@@ -863,20 +863,22 @@ test("instrument interface works in Chromium without external services", async (
     assert.deepEqual(errors, []);
   });
 
-  await t.test('natural expiry allows one neighboring item, acknowledges sound, and Eject clears silently', async (t) => {
+  await t.test('natural expiry and repeated navigation acknowledge sound, and Eject clears silently', async (t) => {
     const { page, errors } = await open(t);
     await setAgenda(page, '00:01 Welcome\n00:02 Discussion\n00:03 Wrap-up');
     await page.locator('#start').click();
     await advance(page, 1000);
     await waitState(page, 'finished');
     await page.waitForFunction(() => !window.__alarmAudio.paused && window.__alarmAudio.currentTime > 0);
-    await assertTransport(page, false, true, true);
+    await assertTransport(page, true, true, true);
     await page.locator('#agenda-next').click();
     assert.equal(await page.locator('#timer-display').textContent(), '00:02');
     assert.equal(await page.locator('#timer-face').getAttribute('data-state'), 'idle');
     assert.equal(await page.evaluate(() => window.__alarmAudio.paused), true);
-    await assertTransport(page, false, false, false);
-    await page.locator('#agenda-next').evaluate(el => el.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await assertTransport(page, true, true, true);
+    await page.locator('#agenda-next').click();
+    assert.equal(await page.locator('#timer-display').textContent(), '00:03');
+    await page.locator('#agenda-previous').click();
     assert.equal(await page.locator('#timer-display').textContent(), '00:02');
     await page.locator('#mute').click();
     await page.locator('#start').click();
@@ -885,18 +887,18 @@ test("instrument interface works in Chromium without external services", async (
     await assertTransport(page, true, true, true);
     await page.locator('#agenda-previous').click();
     assert.equal(await page.locator('#timer-display').textContent(), '00:01');
-    await assertTransport(page, false, false, false);
+    await assertTransport(page, true, true, true);
     for (const seconds of [1, 2]) {
       await page.locator('#start').click();
       await advance(page, seconds * 1000);
       await waitState(page, 'finished');
       await page.locator('#agenda-next').click();
-      await assertTransport(page, false, false, false);
+      await assertTransport(page, true, true, true);
     }
     await page.locator('#start').click();
     await advance(page, 3000);
     await waitState(page, 'finished');
-    await assertTransport(page, true, true, false);
+    await assertTransport(page, true, true, true);
     await screenshot(page, 'agenda-expired');
     await page.locator('#agenda-eject').click();
     assert.equal(await page.locator('#agenda-panel').isVisible(), true);
@@ -904,10 +906,45 @@ test("instrument interface works in Chromium without external services", async (
     assert.equal(await page.locator('#agenda-input').evaluate(el => el.readOnly), true);
     assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 00:00');
     assert.equal(await page.locator('#timer-display').textContent(), '00:00');
-    await assertTransport(page, false, false, false);
+    await assertTransport(page, true, true, true);
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('#timer-display').textContent(), '00:00');
     assert.equal(await page.evaluate(() => window.__audiblePlays), 1);
+    assert.deepEqual(errors, []);
+  });
+
+  await t.test('navigation can end items early and Eject is blocked only while running', async (t) => {
+    const { page, errors } = await open(t);
+    await setAgenda(page, '05:00 First\n10:00 Second\n03:00 Last');
+    await assertTransport(page, true, true, true);
+    await page.locator('#agenda-previous').click();
+    assert.equal(await page.locator('#timer-display').textContent(), '05:00');
+    await page.locator('#start').click();
+    await advance(page, 30000);
+    await assertTransport(page, true, false, true);
+    await page.locator('#agenda-eject').evaluate(el => el.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 18:00');
+    await waitState(page, 'running');
+    await page.locator('#agenda-next').click();
+    await waitState(page, 'idle');
+    assert.equal(await page.locator('#timer-display').textContent(), '10:00');
+    await advance(page, 600000);
+    await waitState(page, 'idle');
+    assert.equal(await page.evaluate(() => window.__audiblePlays), 0);
+    await page.locator('#start').click();
+    await page.locator('#pause').click();
+    await assertTransport(page, true, true, true);
+    await page.locator('#agenda-previous').click();
+    assert.equal(await page.locator('#timer-display').textContent(), '05:00');
+    await page.locator('#start').click();
+    await page.locator('#pause').click();
+    await page.locator('#agenda-eject').click();
+    await waitState(page, 'idle');
+    assert.equal(await page.locator('#agenda-input').inputValue(), '');
+    assert.equal(await page.locator('#timer-display').textContent(), '00:00');
+    await assertTransport(page, true, true, true);
+    await page.locator('#agenda-next').click();
+    assert.equal(await page.locator('#timer-display').textContent(), '00:00');
     assert.deepEqual(errors, []);
   });
 
@@ -939,9 +976,9 @@ test("instrument interface works in Chromium without external services", async (
     assert.equal(await input.inputValue(), '99:00 Long\n36:00 Longer');
     assert.equal(await page.locator('#timer-display').textContent(), '00:00');
     assert.equal(await input.evaluate(el => el.readOnly), true);
-    await assertTransport(page, false, false, false);
+    await assertTransport(page, true, true, true);
     await page.locator('#agenda-eject').evaluate(el => el.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 135:00');
+    assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 00:00');
     await page.locator('#stop').click();
     await input.fill('');
     await input.blur();
@@ -991,7 +1028,7 @@ test("instrument interface works in Chromium without external services", async (
     await page.locator('#agenda-next').focus();
     await page.keyboard.press('Enter');
     assert.equal(await page.locator('#timer-display').textContent(), '00:02');
-    await assertTransport(page, false, false, false);
+    await assertTransport(page, true, true, true);
     await page.keyboard.press('Space');
     await waitState(page, 'running');
     await page.getByRole('button', { name: 'Pause timer', exact: true }).dblclick();
