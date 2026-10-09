@@ -117,6 +117,7 @@ test("instrument interface works in Chromium without external services", async (
     await page.screenshot({
       path: `${process.env.SCREENSHOT_DIR}/${name}.png`,
       fullPage: true,
+      animations: "disabled",
     });
   }
 
@@ -793,4 +794,296 @@ test("instrument interface works in Chromium without external services", async (
       assert.deepEqual(errors, []);
     },
   );
+
+  async function setAgenda(page, text) {
+    if (!(await page.locator('#agenda-panel').isVisible())) await page.locator('#agenda-toggle').click();
+    await page.locator('#stop').click();
+    await page.locator('#agenda-input').fill(text);
+    await page.locator('#agenda-input').blur();
+  }
+  async function assertTransport(page, previous, eject, next) {
+    for (const [action, enabled] of Object.entries({ previous, eject, next }))
+      assert.equal(await page.locator(`#agenda-${action}`).isEnabled(), enabled, action);
+  }
+
+  await t.test('agenda opens locked, Stop unlocks, sample commits, and show/hide preserves timing', async (t) => {
+    const { page, errors } = await open(t);
+    const input = page.locator('#agenda-input');
+    assert.equal(await page.locator('#agenda-panel').isVisible(), false);
+    await page.locator('#agenda-toggle').click();
+    assert.equal(await input.getAttribute('readonly'), '');
+    assert.equal(await page.locator('#stop').isEnabled(), true);
+    assert.equal(await page.locator('#agenda-hint').textContent(), 'PRESS STOP TO EDIT');
+    await assertTransport(page, false, false, false);
+    await page.locator('#stop').click();
+    assert.equal(await input.evaluate(el => el === document.activeElement), true);
+    await input.fill('05:00 Welcome\n10:00 Discussion\n08:00 Decisions\n02:00 Wrap-up');
+    await input.blur();
+    assert.equal(await page.locator('#timer-display').textContent(), '05:00');
+    assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 25:00');
+    assert.match(await page.locator('#agenda-selection').textContent(), /Selected item 1: Welcome/);
+    assert.equal(await input.inputValue(), '05:00 Welcome\n10:00 Discussion\n08:00 Decisions\n02:00 Wrap-up');
+    await screenshot(page, 'agenda-dark');
+    await page.locator('#theme-light').click();
+    const headingPng = await page.locator('#agenda-heading').screenshot();
+    const whitePixels = await page.evaluate(async dataUrl => {
+      const image = new Image();
+      image.src = dataUrl;
+      await image.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext('2d');
+      context.drawImage(image, 0, 0);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      let count = 0;
+      for (let i = 0; i < pixels.length; i += 4)
+        if (pixels[i] > 200 && pixels[i + 1] > 200 && pixels[i + 2] > 200) count++;
+      return count;
+    }, `data:image/png;base64,${headingPng.toString('base64')}`);
+    assert.ok(whitePixels > 30, 'white pixel text remains painted after theme switching');
+    await screenshot(page, 'agenda-light');
+    assert.equal(await input.evaluate(el => getComputedStyle(el).color), 'rgb(255, 255, 255)');
+    await page.locator('#start').click();
+    assert.equal(await input.evaluate(el => el.readOnly), true);
+    await advance(page, 30000);
+    await page.locator('#agenda-toggle').click();
+    assert.equal(await page.locator('#timer-face').getAttribute('data-state'), 'running');
+    assert.equal(await page.locator('#timer-display').textContent(), '04:30');
+    await page.locator('#agenda-toggle').click();
+    await page.locator('#pause').click();
+    assert.equal(await input.evaluate(el => el.readOnly), true);
+    await assertTransport(page, false, false, false);
+    await page.locator('#stop').click();
+    await input.blur();
+    assert.equal(await page.locator('#timer-display').textContent(), '04:30');
+    await page.locator('#reset').click();
+    assert.equal(await page.locator('#timer-display').textContent(), '05:00');
+    assert.equal(await input.evaluate(el => el.readOnly), true);
+    assert.deepEqual(errors, []);
+  });
+
+  await t.test('natural expiry allows one neighboring item, acknowledges sound, and Eject clears silently', async (t) => {
+    const { page, errors } = await open(t);
+    await setAgenda(page, '00:01 Welcome\n00:02 Discussion\n00:03 Wrap-up');
+    await page.locator('#start').click();
+    await advance(page, 1000);
+    await waitState(page, 'finished');
+    await page.waitForFunction(() => !window.__alarmAudio.paused && window.__alarmAudio.currentTime > 0);
+    await assertTransport(page, false, true, true);
+    await page.locator('#agenda-next').click();
+    assert.equal(await page.locator('#timer-display').textContent(), '00:02');
+    assert.equal(await page.locator('#timer-face').getAttribute('data-state'), 'idle');
+    assert.equal(await page.evaluate(() => window.__alarmAudio.paused), true);
+    await assertTransport(page, false, false, false);
+    await page.locator('#agenda-next').evaluate(el => el.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    assert.equal(await page.locator('#timer-display').textContent(), '00:02');
+    await page.locator('#mute').click();
+    await page.locator('#start').click();
+    await advance(page, 2000);
+    await waitState(page, 'finished');
+    await assertTransport(page, true, true, true);
+    await page.locator('#agenda-previous').click();
+    assert.equal(await page.locator('#timer-display').textContent(), '00:01');
+    await assertTransport(page, false, false, false);
+    for (const seconds of [1, 2]) {
+      await page.locator('#start').click();
+      await advance(page, seconds * 1000);
+      await waitState(page, 'finished');
+      await page.locator('#agenda-next').click();
+      await assertTransport(page, false, false, false);
+    }
+    await page.locator('#start').click();
+    await advance(page, 3000);
+    await waitState(page, 'finished');
+    await assertTransport(page, true, true, false);
+    await screenshot(page, 'agenda-expired');
+    await page.locator('#agenda-eject').click();
+    assert.equal(await page.locator('#agenda-panel').isVisible(), true);
+    assert.equal(await page.locator('#agenda-input').inputValue(), '');
+    assert.equal(await page.locator('#agenda-input').evaluate(el => el.readOnly), true);
+    assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 00:00');
+    assert.equal(await page.locator('#timer-display').textContent(), '00:00');
+    await assertTransport(page, false, false, false);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#timer-display').textContent(), '00:00');
+    assert.equal(await page.evaluate(() => window.__audiblePlays), 1);
+    assert.deepEqual(errors, []);
+  });
+
+  await t.test('invalid drafts retain saved entries, survive hiding, block Start, and cancel with Reset/Escape', async (t) => {
+    const { page, errors } = await open(t);
+    await setAgenda(page, '05:00 Úvod — café!\n10:00 Discussion  & decisions');
+    const input = page.locator('#agenda-input');
+    await input.fill('05:00 Valid\n10:99 Bad seconds');
+    await input.blur();
+    assert.match(await page.locator('#agenda-error').textContent(), /Line 2/);
+    assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 15:00');
+    assert.equal(await page.locator('#timer-display').textContent(), '05:00');
+    await page.locator('#agenda-toggle').click();
+    assert.equal(await page.locator('#agenda-panel').isVisible(), false);
+    await page.locator('#start').click();
+    assert.equal(await page.locator('#agenda-panel').isVisible(), true);
+    assert.equal(await page.locator('#timer-face').getAttribute('data-state'), 'idle');
+    assert.equal(await input.inputValue(), '05:00 Valid\n10:99 Bad seconds');
+    await page.locator('#reset').click();
+    assert.equal(await input.inputValue(), '05:00 Úvod — café!\n10:00 Discussion  & decisions');
+    assert.equal(await input.evaluate(el => el.readOnly), true);
+    assert.equal(await page.locator('#agenda-error').isVisible(), false);
+    await page.locator('#stop').click();
+    await input.fill('99:00 Long\n36:00 Longer');
+    await input.blur();
+    assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 135:00');
+    await input.fill('unfinished');
+    await input.press('Escape');
+    assert.equal(await input.inputValue(), '99:00 Long\n36:00 Longer');
+    assert.equal(await page.locator('#timer-display').textContent(), '00:00');
+    assert.equal(await input.evaluate(el => el.readOnly), true);
+    await assertTransport(page, false, false, false);
+    await page.locator('#agenda-eject').evaluate(el => el.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 135:00');
+    await page.locator('#stop').click();
+    await input.fill('');
+    await input.blur();
+    assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 00:00');
+    assert.deepEqual(errors, []);
+  });
+
+  await t.test('native textarea editing and global shortcuts work with textarea and transport focus', async (t) => {
+    const { page, errors } = await open(t);
+    await page.locator('#agenda-toggle').click();
+    await page.locator('#stop').click();
+    const input = page.locator('#agenda-input');
+    await input.pressSequentially('00:01');
+    await input.press('Shift+Space');
+    await input.pressSequentially('Úvod');
+    await input.press('Enter');
+    await input.pressSequentially('00:02');
+    await input.press('Shift+Space');
+    await input.pressSequentially('Café');
+    assert.equal(await input.inputValue(), '00:01 Úvod\n00:02 Café');
+    await input.press('ControlOrMeta+z');
+    assert.notEqual(await input.inputValue(), '00:01 Úvod\n00:02 Café');
+    await input.fill('00:01 Úvod\n00:02 Café');
+    await input.press('Space');
+    await waitState(page, 'running');
+    assert.equal(await input.evaluate(el => el.readOnly), true);
+    await input.focus();
+    await input.press('Space');
+    await waitState(page, 'paused');
+    await input.press('Space');
+    await waitState(page, 'running');
+    await advance(page, 1000);
+    await waitState(page, 'finished');
+    await page.locator('#agenda-next').focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#timer-display').textContent(), '00:02');
+    await assertTransport(page, false, false, false);
+    await page.keyboard.press('Space');
+    await waitState(page, 'running');
+    await page.getByRole('button', { name: 'Pause timer', exact: true }).dblclick();
+    await waitState(page, 'idle');
+    assert.equal(await input.evaluate(el => el.readOnly), true);
+    assert.equal(await page.locator('#timer-display').textContent(), '00:02');
+    await page.locator('#stop').click();
+    await input.fill('not committed');
+    await page.keyboard.press('Escape');
+    assert.equal(await input.inputValue(), '00:01 Úvod\n00:02 Café');
+    assert.deepEqual(errors, []);
+  });
+
+  await t.test('agenda reload restores the selected duration read-only and manual timer edits preserve its plan', async (t) => {
+    const { page, errors } = await open(t);
+    await setAgenda(page, '00:01 First\n10:00 Discussion\n08:00 Decisions');
+    await page.locator('#mute').click();
+    await page.locator('#start').click();
+    await advance(page, 1000);
+    await waitState(page, 'finished');
+    await page.locator('#agenda-next').click();
+    await page.locator('#theme-light').click();
+    await page.reload();
+    assert.equal(await page.locator('#agenda-panel').isVisible(), false);
+    assert.equal(await page.locator('#timer-display').textContent(), '10:00');
+    await page.locator('#agenda-toggle').click();
+    assert.equal(await page.locator('#agenda-input').evaluate(el => el.readOnly), true);
+    assert.match(await page.locator('#agenda-selection').textContent(), /Selected item 2: Discussion/);
+    await setTime(page, '03:00');
+    await page.locator('#start').click();
+    await advance(page, 30000);
+    await page.locator('#stop').click();
+    await page.locator('#agenda-input').blur();
+    assert.equal(await page.locator('#timer-display').textContent(), '02:30');
+    await page.locator('#reset').click();
+    assert.equal(await page.locator('#timer-display').textContent(), '03:00');
+    assert.match(await page.locator('#agenda-input').inputValue(), /10:00 Discussion/);
+    await page.locator('#stop').click();
+    await page.locator('#agenda-input').fill('01:00 Replacement');
+    await page.locator('#agenda-input').blur();
+    assert.match(await page.locator('#agenda-selection').textContent(), /Selected item 1: Replacement/);
+    assert.equal(await page.locator('#timer-display').textContent(), '01:00');
+    assert.deepEqual(errors, []);
+  });
+
+  await t.test('Unicode and long agendas scroll inside black glass, captions sit below caps, and mobile fits', async (t) => {
+    const { page, errors } = await open(t, { mobile: true, reducedMotion: 'reduce' });
+    const text = Array.from({ length: 20 }, (_, i) => `01:00 ${i ? 'Item ' + i : 'Úvod — café! Discussion with a long title that wraps beneath the title column'}`).join('\n');
+    await setAgenda(page, text);
+    assert.equal(await page.locator('#agenda-input').inputValue(), text);
+    const input = page.locator('#agenda-input');
+    await input.evaluate(el => el.setSelectionRange(el.value.length, el.value.length));
+    assert.match(await page.locator('#agenda-selection').textContent(), /Selected item 1: Úvod/);
+    assert.equal(await input.evaluate(el => el.scrollHeight > el.clientHeight), true);
+    const linePositions = await page.locator('#agenda-measure').evaluate(el => {
+      const ranges = [...el.children].slice(0, 2).map(row => {
+        const range = document.createRange();
+        range.selectNodeContents(row);
+        return [...range.getClientRects()].map(rect => ({ x: rect.x, y: rect.y }));
+      });
+      return ranges;
+    });
+    assert.equal(linePositions[0][0].x, linePositions[1][0].x, 'duration columns align');
+    assert.ok(linePositions[0][1].x > linePositions[0][0].x, 'wrapped title is indented');
+    assert.equal(await page.locator('#agenda-panel').evaluate(el => getComputedStyle(el).animationName), 'none');
+    await page.locator('#start').click();
+    await screenshot(page, 'agenda-mobile');
+    await page.locator('#theme-light').click();
+    assert.equal(await input.evaluate(el => getComputedStyle(el).color), 'rgb(255, 255, 255)');
+    for (const size of [{ width: 390, height: 844 }, { width: 320, height: 568 }, { width: 768, height: 1024 }, { width: 1280, height: 800 }]) {
+      await page.setViewportSize(size);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      const stage = await page.locator('#timer-stage').boundingBox();
+      const dock = await page.locator('#control-dock').boundingBox();
+      assert.ok(stage.y + stage.height <= dock.y);
+    }
+    for (const selector of ['#start', '#pause', '#stop', '#reset', '#mute', '#sound-selector', '#agenda-toggle', '#theme-dark', '#agenda-previous', '#agenda-eject', '#agenda-next']) {
+      const button = page.locator(selector);
+      const face = await button.locator('.key-face').boundingBox();
+      const caption = await button.locator('.key-caption').boundingBox();
+      assert.ok(caption.y >= face.y + face.height);
+      const box = await button.boundingBox();
+      assert.ok(box.width >= 44 && box.height >= 44);
+    }
+    await screenshot(page, 'agenda-long-light');
+    assert.deepEqual(errors, []);
+  });
+
+
+  await t.test('showing or hiding Agenda at the deadline preserves the natural completion alarm', async (t) => {
+    const { page, errors } = await open(t);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await setTime(page, '00:01');
+      await page.locator('#start').click();
+      await page.evaluate(() => {
+        window.__timeOffset += 1000;
+        document.getElementById('agenda-toggle').click();
+      });
+      await waitState(page, 'finished');
+      await page.waitForFunction(() => !window.__alarmAudio.paused && window.__alarmAudio.currentTime > 0);
+      assert.equal(await page.evaluate(() => window.__audiblePlays), attempt + 1);
+      assert.equal(await page.locator('#agenda-panel').isVisible(), attempt === 0);
+      await page.locator('#reset').click();
+    }
+    assert.deepEqual(errors, []);
+  });
+
 });

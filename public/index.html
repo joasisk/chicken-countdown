@@ -67,11 +67,23 @@
         <symbol id="icon-check" viewBox="0 0 24 24">
           <path d="m5 12 4 4 10-10" />
         </symbol>
+        <symbol id="icon-agenda" viewBox="0 0 24 24">
+          <path d="M8 6h13M8 12h13M8 18h13" /><path class="filled" d="M2 5h3v3H2zM2 11h3v3H2zM2 17h3v3H2z" />
+        </symbol>
+        <symbol id="icon-previous" viewBox="0 0 24 24">
+          <path class="filled" d="M3 4h3v16H3zM20 4 7 12l13 8z" />
+        </symbol>
+        <symbol id="icon-next" viewBox="0 0 24 24">
+          <path class="filled" d="M18 4h3v16h-3zM4 4l13 8-13 8z" />
+        </symbol>
+        <symbol id="icon-eject" viewBox="0 0 24 24">
+          <path class="filled" d="m12 4 9 11H3zM3 18h18v3H3z" />
+        </symbol>
       </defs>
     </svg>
     <main class="instrument" aria-label="Chicken Countdown">
       <h1 class="sr-only">Chicken Countdown</h1>
-      <section class="timer-stage" aria-label="Countdown timer">
+      <section class="timer-stage" id="timer-stage" aria-label="Countdown timer">
         <div class="timer-face" id="timer-face">
           <div class="time-field" id="time-field">
             <div
@@ -109,6 +121,33 @@
           </p>
           <p class="duration-error" id="duration-error" role="alert" hidden></p>
         </div>
+        <aside class="agenda-panel" id="agenda-panel" aria-labelledby="agenda-heading" hidden>
+          <div class="agenda-glass">
+            <div class="agenda-heading"><h2 id="agenda-heading">AGENDA</h2><span aria-hidden="true">MM:SS</span></div>
+            <div class="agenda-text-region" id="agenda-text-region">
+              <div class="agenda-gutter" aria-hidden="true"><span id="agenda-marker" hidden>›</span></div>
+              <textarea id="agenda-input" class="agenda-text" aria-label="Agenda, one duration and title per line"
+                aria-describedby="agenda-hint agenda-total agenda-error agenda-selection" readonly
+                spellcheck="false" autocomplete="off" wrap="soft"></textarea>
+              <div id="agenda-measure" class="agenda-text agenda-measure" aria-hidden="true"></div>
+            </div>
+            <output id="agenda-total">TOTAL 00:00</output>
+            <p id="agenda-hint">PRESS STOP TO EDIT</p>
+            <p id="agenda-error" role="alert" hidden></p>
+            <p id="agenda-selection" class="sr-only">No agenda item selected.</p>
+          </div>
+          <div class="agenda-transport key-bank" role="group" aria-label="Agenda transport">
+            <button id="agenda-previous" class="cassette-key" type="button" aria-label="Previous agenda item" title="Previous item after expiry" disabled>
+              <span class="key-face"><svg aria-hidden="true"><use href="#icon-previous" /></svg></span><span class="key-caption">Previous</span>
+            </button>
+            <button id="agenda-eject" class="cassette-key" type="button" aria-label="Clear agenda" title="Clear agenda after expiry" disabled>
+              <span class="key-face"><svg aria-hidden="true"><use href="#icon-eject" /></svg></span><span class="key-caption">Eject</span>
+            </button>
+            <button id="agenda-next" class="cassette-key" type="button" aria-label="Next agenda item" title="Next item after expiry" disabled>
+              <span class="key-face"><svg aria-hidden="true"><use href="#icon-next" /></svg></span><span class="key-caption">Next</span>
+            </button>
+          </div>
+        </aside>
       </section>
       <section
         class="control-dock"
@@ -117,49 +156,45 @@
       >
         <div class="dock-controls">
           <div
-            class="timer-actions"
+            class="timer-actions key-bank"
             role="group"
             aria-label="Countdown actions"
           >
             <button
               id="start"
-              class="control-button"
+              class="control-button cassette-key"
               type="button"
               title="Start or resume (Space)"
               disabled
             >
-              <svg aria-hidden="true"><use href="#icon-play" /></svg
-              ><span>Start</span>
+              <span class="key-face"><svg aria-hidden="true"><use href="#icon-play" /></svg></span><span class="key-caption" id="start-label">Start</span>
             </button>
             <button
               id="pause"
-              class="control-button"
+              class="control-button cassette-key"
               type="button"
               title="Pause (Space)"
               disabled
             >
-              <svg aria-hidden="true"><use href="#icon-pause" /></svg
-              ><span>Pause</span>
+              <span class="key-face"><svg aria-hidden="true"><use href="#icon-pause" /></svg></span><span class="key-caption">Pause</span>
             </button>
             <button
               id="stop"
-              class="control-button"
+              class="control-button cassette-key"
               type="button"
-              title="Stop and keep the remaining time"
+              title="Stop, keep remaining time, and unlock agenda editing"
               disabled
             >
-              <svg aria-hidden="true"><use href="#icon-stop" /></svg
-              ><span>Stop</span>
+              <span class="key-face"><svg aria-hidden="true"><use href="#icon-stop" /></svg></span><span class="key-caption">Stop</span>
             </button>
             <button
               id="reset"
-              class="control-button"
+              class="control-button cassette-key"
               type="button"
               title="Restore your original duration"
               disabled
             >
-              <svg aria-hidden="true"><use href="#icon-reset" /></svg
-              ><span>Reset</span>
+              <span class="key-face"><svg aria-hidden="true"><use href="#icon-reset" /></svg></span><span class="key-caption">Reset</span>
             </button>
           </div>
           <div
@@ -169,29 +204,23 @@
           >
             <button
               id="mute"
-              class="speaker-button"
+              class="speaker-button cassette-key"
               type="button"
               aria-label="Mute sound"
               aria-pressed="false"
               title="Mute sound"
             >
-              <svg aria-hidden="true"><use href="#icon-speaker" /></svg>
+              <span class="key-face"><svg aria-hidden="true"><use href="#icon-speaker" /></svg></span><span class="key-caption" id="mute-label">Mute</span>
             </button>
-            <input
-              id="volume"
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              value="60"
-              aria-label="Alarm volume"
-            />
-            <output id="volume-value" for="volume">60%</output>
+            <label class="volume-column">
+              <span class="slider-face"><input id="volume" type="range" min="0" max="100" step="1" value="60" aria-label="Alarm volume" /></span>
+              <span class="key-caption">Volume <output id="volume-value" for="volume">60%</output></span>
+            </label>
           </div>
           <div class="sound-controls dock-group" id="sound-controls">
             <button
               id="sound-selector"
-              class="sound-selector"
+              class="sound-selector cassette-key"
               type="button"
               aria-label="Alarm sound: chicken orchestra"
               aria-haspopup="menu"
@@ -199,11 +228,8 @@
               aria-controls="sound-menu"
               title="chicken orchestra"
             >
-              <svg aria-hidden="true"><use href="#icon-note" /></svg
-              ><span id="sound-name">chicken orchestra</span
-              ><svg class="chevron" aria-hidden="true">
-                <use href="#icon-chevron" />
-              </svg>
+              <span class="key-face"><svg aria-hidden="true"><use href="#icon-note" /></svg><svg class="chevron" aria-hidden="true"><use href="#icon-chevron" /></svg></span>
+              <span class="key-caption sound-caption" id="sound-name">chicken orchestra</span>
             </button>
             <div
               id="sound-menu"
@@ -243,27 +269,33 @@
               hidden
             />
           </div>
+          <div class="agenda-toggle-controls dock-group">
+            <button id="agenda-toggle" class="cassette-key" type="button" aria-label="Agenda" aria-pressed="false" aria-expanded="false" aria-controls="agenda-panel" title="Show or hide agenda">
+              <span class="key-face"><svg aria-hidden="true"><use href="#icon-agenda" /></svg></span><span class="key-caption">Agenda</span>
+            </button>
+          </div>
           <div
             class="theme-controls dock-group"
             role="group"
             aria-label="Color theme"
           >
-            <div class="theme-switch">
+            <div class="theme-switch key-bank">
               <button
                 id="theme-dark"
+                class="cassette-key"
                 type="button"
                 data-theme="dark"
                 aria-pressed="true"
               >
-                <svg aria-hidden="true"><use href="#icon-moon" /></svg
-                >Dark</button
+                <span class="key-face"><svg aria-hidden="true"><use href="#icon-moon" /></svg></span><span class="key-caption">Dark</span></button
               ><button
                 id="theme-light"
+                class="cassette-key"
                 type="button"
                 data-theme="light"
                 aria-pressed="false"
               >
-                <svg aria-hidden="true"><use href="#icon-sun" /></svg>Light
+                <span class="key-face"><svg aria-hidden="true"><use href="#icon-sun" /></svg></span><span class="key-caption">Light</span>
               </button>
             </div>
           </div>

@@ -1,6 +1,6 @@
 # Chicken Countdown
 
-A local countdown instrument with an editable timer face, a quiet control dock, and a chicken-orchestra alarm. The interface follows the supplied countdown design kit and works offline.
+A local countdown instrument with an editable timer face, an optional meeting agenda, cassette-style controls, and a chicken-orchestra alarm. The interface follows the supplied countdown design kit and agenda handoff and works offline.
 
 ## Portable two-file version
 
@@ -28,7 +28,28 @@ The first-use display is **00:00**, with Dark selected and volume at 60%. Click 
 - **Space** starts, pauses, or resumes, even when another app control has focus. **Escape** cancels the timer and alarm and clears both the original and remaining duration to zero.
 - During the last ten seconds, a red glow pulses over the original digit color once per second. Pausing stops the pulse; reduced-motion preferences show a steady glow. At zero, the timer stays red, announces completion, and plays the selected sound once unless muted.
 
-Keep the tab open and your device awake. The timer uses a deadline to account for background-tab delays; browser or operating-system suspension can postpone the alarm until the app wakes. Refreshing clears the countdown.
+Keep the tab open and your device awake. The timer uses a deadline to account for background-tab delays; browser or operating-system suspension can postpone the alarm until the app wakes. Refreshing stops the countdown and restores the selected agenda item's planned duration if an agenda has been saved.
+
+## Meeting agenda
+
+Select **Agenda**, then **Stop** to unlock its display. Enter or paste one duration and title per line:
+
+```text
+05:00 Welcome
+10:00 Discussion
+08:00 Decisions
+02:00 Wrap-up
+```
+
+Each duration must be exactly `MM:SS`, from `00:01` to `99:59`, followed by a space or tab and a title. Blank lines are ignored; titles retain accents, case, punctuation, internal spacing, and duplicates. Valid edits save on blur, hiding the panel, or Start. The first item loads automatically; later edits keep or clamp the selected item and load its full planned duration. An unchanged blur preserves the timer's remainder. The total is read-only and can exceed `99:59`.
+
+**Start / Resume** locks the agenda. **Pause** and natural expiration keep it locked. **Stop** keeps the timer remainder, unlocks editing, and focuses the visible agenda. Reset and running-display double-click restore the timer baseline, discard pending agenda edits, and lock editing. Escape clears the timer and baseline, discards pending edits, and retains the saved agenda. Showing/hiding preserves timer state, contents, and the editing latch.
+
+Malformed drafts remain visible with line-specific errors and retain the last valid agenda. Even a hidden invalid draft blocks Start and reopens the display. Fix it after Stop, or discard it with Reset/Escape. Editing to empty text clears the list.
+
+**Previous / Eject / Next** are available only after the countdown naturally expires. Previous/Next select one adjacent item, silence the alarm, load its planned duration, and immediately disable all three keys until another expiration. Press Start to begin that item. Eject clears the agenda and timer while keeping the panel visible and locked. There is no automatic advance.
+
+The display is a native textarea with selection, copy/paste, and undo. **Space** controls the timer even while it has focus; use **Shift+Space** to type a space and **Enter** to add a line. Moving the caret does not change the selected meeting item. Long titles wrap beneath their title column and long lists scroll inside the black glass. The saved agenda and selected item persist with preferences; drafts, visibility, and the editing latch do not persist.
 
 ## Sound and theme
 
@@ -54,6 +75,6 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-The tests automatically use `/usr/bin/chromium` when available; set `CHROMIUM_PATH` for another installed Chromium executable. They cover masked input, Stop/Reset semantics, pointer and keyboard controls, actual MP3/custom-file playback, invalid-file handling, preferences, final-ten-second warnings, reduced motion, and responsive layouts. They block external requests. `SCREENSHOT_DIR=/tmp/countdown-screens npm run test:browser` also saves reference screenshots.
+The tests automatically use `/usr/bin/chromium` when available; set `CHROMIUM_PATH` for another installed Chromium executable. They cover masked input, Stop/Reset semantics, pointer and keyboard controls, actual MP3/custom-file playback, invalid-file handling, preferences, final-ten-second warnings, reduced motion, responsive layouts, strict agenda parsing, draft validation, expiry-only transport, Unicode editing, and agenda persistence. They block external requests. `SCREENSHOT_DIR=/tmp/countdown-screens npm run test:browser` also saves reference screenshots.
 
-The app binds to `127.0.0.1` by default. `HOST` and `PORT` are optional. No credentials or external services are required. The self-hosted Barlow Condensed font is distributed under the SIL Open Font License; see `public/fonts/OFL.txt`.
+The app binds to `127.0.0.1` by default. `HOST` and `PORT` are optional. No credentials or external services are required. The self-hosted Barlow Condensed and VT323 fonts are distributed under the SIL Open Font License; see `public/fonts/OFL.txt` and `public/fonts/VT323-OFL.txt`.

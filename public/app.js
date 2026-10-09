@@ -1,5 +1,6 @@
 import { Countdown, durationFromInput, formatTime } from "./timer.js";
 import { AlarmAudio } from "./audio.js";
+import { Agenda } from "./agenda.js";
 
 const $ = (id) => document.getElementById(id);
 const timer = new Countdown();
@@ -11,6 +12,7 @@ let preferences = {
   muted: false,
   lastNonzero: 60,
   customName: null,
+  agenda: null,
 };
 try {
   const saved = JSON.parse(localStorage.getItem(preferenceKey));
@@ -31,10 +33,17 @@ try {
       preferences.lastNonzero = saved.lastNonzero;
     if (typeof saved.customName === "string" && saved.customName)
       preferences.customName = saved.customName;
+    preferences.agenda = saved.agenda;
   }
 } catch {
   /* Storage is optional; the timer also works without it. */
 }
+
+const agenda = new Agenda(preferences.agenda);
+const agendaEditor = $("agenda-input");
+agendaEditor.value = agenda.draftText;
+// Restoring an agenda loads its selected planned duration, never a stale run.
+if (agenda.entries.length) timer.configure(agenda.selectedDuration);
 
 let previousStatus = "idle";
 let warned = false;
@@ -46,6 +55,7 @@ let gestureInitialState;
 const audio = new AlarmAudio({ onMessage: showAudioMessage });
 
 function savePreferences() {
+  preferences.agenda = agenda.saved();
   try {
     localStorage.setItem(preferenceKey, JSON.stringify(preferences));
   } catch {
@@ -55,6 +65,9 @@ function savePreferences() {
 
 function announce(message) {
   $("announcer").textContent = message;
+}
+function setText(id, value) {
+  if ($(id).textContent !== value) $(id).textContent = value;
 }
 function showAudioMessage(message = "") {
   $("audio-message").textContent = message;
@@ -93,6 +106,7 @@ function renderSettings() {
     preferences.muted ? "Unmute sound" : "Mute sound",
   );
   $("mute").title = preferences.muted ? "Unmute sound" : "Mute sound";
+  $("mute-label").textContent = preferences.muted ? "Unmute" : "Mute";
   $("mute")
     .querySelector("use")
     .setAttribute("href", preferences.muted ? "#icon-muted" : "#icon-speaker");
@@ -147,20 +161,21 @@ function render({ allowAlarm = true } = {}) {
           paused: "PAUSED · CLICK TO RESUME",
           finished: "TIME’S UP · CLICK TO EDIT",
         }[status];
-  $("start").querySelector("span").textContent =
+  $("start-label").textContent =
     status === "paused" ? "Resume" : "Start";
   const draftChanged = editing && editor.value !== editorBaseline;
   $("start").disabled =
     status === "running" ||
-    (status === "idle" && remaining === 0 && !draftChanged) ||
+    (status === "idle" && remaining === 0 && !draftChanged && !agenda.dirty) ||
     (status === "finished" && timer.duration === 0);
   $("pause").disabled = status !== "running";
-  $("stop").disabled = status === "idle";
+  $("stop").disabled = status === "idle" && !agenda.visible && !agenda.editingUnlocked;
   $("reset").disabled =
     status === "idle" &&
     timer.duration === 0 &&
     remaining === 0 &&
-    !draftChanged;
+    !draftChanged && !agenda.dirty && !agenda.editingUnlocked;
+  renderAgenda(status, remaining);
   const warning =
     (status === "running" || status === "paused") &&
     remaining > 0 &&
@@ -195,6 +210,170 @@ function render({ allowAlarm = true } = {}) {
         : "Chicken Countdown";
   previousStatus = status;
 }
+
+function renderAgenda(status = timer.status, remaining = timer.remaining) {
+  $("timer-stage").classList.toggle("has-agenda", agenda.visible);
+  $("agenda-panel").hidden = !agenda.visible;
+  $("agenda-toggle").setAttribute("aria-pressed", String(agenda.visible));
+  $("agenda-toggle").setAttribute("aria-expanded", String(agenda.visible));
+  agendaEditor.readOnly = !agenda.editingUnlocked;
+  setText("agenda-hint", agenda.editingUnlocked
+    ? "MM:SS title · Shift+Space types a space · Enter adds a line"
+    : "PRESS STOP TO EDIT");
+  setText("agenda-total", `TOTAL ${formatTime(agenda.totalSeconds * 1000)}`);
+  $("agenda-error").hidden = !agenda.errors.length;
+  setText("agenda-error", agenda.errors.map(error => `Line ${error.line}: ${error.message}`).join(" "));
+  agendaEditor.setAttribute("aria-invalid", String(agenda.errors.length > 0));
+  const selected = agenda.entries[agenda.activeIndex];
+  setText("agenda-selection", selected
+    ? `Selected item ${agenda.activeIndex + 1}: ${selected.title}.`
+    : "No agenda item selected.");
+  const permissions = agenda.permissions(status, remaining);
+  for (const action of ["previous", "eject", "next"])
+    $(`agenda-${action}`).disabled = !permissions[action];
+}
+
+// The native textarea owns caret, selection, paste and undo. An unfocused text
+// mirror gives each title a hanging indent without changing the underlying text.
+let agendaMirrorText;
+function positionAgendaSelection() {
+  const mirror = $("agenda-measure");
+  const nativeEditing = document.activeElement === agendaEditor;
+  $("agenda-text-region").classList.toggle("native-editing", nativeEditing);
+  if (agendaMirrorText !== agenda.draftText) {
+    agendaMirrorText = agenda.draftText;
+    mirror.replaceChildren();
+    for (const line of agenda.draftText.split(/\r?\n/)) {
+      const row = document.createElement("div");
+      row.textContent = line || "\u200b";
+      mirror.append(row);
+    }
+  }
+  let nonemptyIndex = 0;
+  let selectedLine = null;
+  for (const row of mirror.children) {
+    if (row.textContent.trim() && row.textContent !== "\u200b") {
+      if (nonemptyIndex === agenda.activeIndex) selectedLine = row;
+      nonemptyIndex++;
+    }
+  }
+  const marker = $("agenda-marker");
+  marker.hidden = !selectedLine;
+  if (selectedLine) {
+    const top = selectedLine.offsetTop - (nativeEditing ? agendaEditor.scrollTop : mirror.scrollTop);
+    marker.style.top = `${top}px`;
+    marker.hidden = top < 0 || top >= agendaEditor.clientHeight - 8;
+  }
+  return selectedLine;
+}
+
+function revealAgendaSelection() {
+  const row = positionAgendaSelection();
+  if (!row) return;
+  const mirror = $("agenda-measure");
+  if (row.offsetTop < mirror.scrollTop || row.offsetTop + 30 > mirror.scrollTop + mirror.clientHeight) {
+    mirror.scrollTop = Math.max(0, row.offsetTop - 4);
+    if (document.activeElement === agendaEditor) agendaEditor.scrollTop = mirror.scrollTop;
+    positionAgendaSelection();
+  }
+}
+
+function syncAgendaDraft() {
+  // Assign only for explicit cancellation/clearing, so commits retain native undo.
+  if (agendaEditor.value !== agenda.draftText) agendaEditor.value = agenda.draftText;
+  positionAgendaSelection();
+}
+
+function commitAgenda({ revealError = false, allowAlarm = true } = {}) {
+  const result = agenda.commit();
+  if (!result.valid) {
+    if (revealError) {
+      agenda.visible = true;
+      renderAgenda();
+      agendaEditor.focus();
+    }
+    renderAgenda();
+    announce($("agenda-error").textContent);
+    return false;
+  }
+  if (result.changed) {
+    audio.stop();
+    timer.configure(result.duration);
+    discardDraft();
+    warned = false;
+    savePreferences();
+    announce(agenda.entries.length ? `Agenda saved. ${agenda.entries.length} items.` : "Agenda cleared.");
+  }
+  if (result.changed) revealAgendaSelection();
+  else positionAgendaSelection();
+  render({ allowAlarm });
+  return true;
+}
+
+$("agenda-toggle").addEventListener("click", () => {
+  if (agenda.visible) commitAgenda();
+  agenda.visible = !agenda.visible;
+  render();
+  positionAgendaSelection();
+});
+agendaEditor.addEventListener("input", () => {
+  if (!agenda.updateDraft(agendaEditor.value)) return;
+  render({ allowAlarm: false });
+  positionAgendaSelection();
+});
+agendaEditor.addEventListener("blur", event => {
+  $("agenda-measure").scrollTop = agendaEditor.scrollTop;
+  if (!["reset", "agenda-eject"].includes(event.relatedTarget?.id) && agenda.editingUnlocked) commitAgenda();
+  positionAgendaSelection();
+});
+agendaEditor.addEventListener("focus", () => {
+  agendaEditor.scrollTop = $("agenda-measure").scrollTop;
+  positionAgendaSelection();
+});
+agendaEditor.addEventListener("scroll", positionAgendaSelection);
+$("agenda-measure").addEventListener("scroll", positionAgendaSelection);
+agendaEditor.addEventListener("wheel", event => {
+  if (document.activeElement === agendaEditor) return;
+  const mirror = $("agenda-measure");
+  const delta = event.deltaY * (event.deltaMode === 1 ? 30 : event.deltaMode === 2 ? mirror.clientHeight : 1);
+  const canScroll = delta < 0 ? mirror.scrollTop > 0 : mirror.scrollTop + mirror.clientHeight < mirror.scrollHeight;
+  if (canScroll) {
+    event.preventDefault();
+    mirror.scrollTop += delta;
+  }
+}, { passive: false });
+new ResizeObserver(positionAgendaSelection).observe(agendaEditor);
+document.fonts.ready.then(positionAgendaSelection);
+
+function navigateAgenda(offset) {
+  // Do not reconcile a running deadline here: only a rendered natural expiry
+  // may grant navigation. The model repeats the guard used by disabled keys.
+  const duration = agenda.navigate(offset, timer.status, timer.remaining);
+  if (duration === null) return;
+  cancelClick();
+  audio.stop();
+  timer.configure(duration);
+  discardDraft();
+  warned = false;
+  savePreferences();
+  announce(`Selected ${agenda.entries[agenda.activeIndex].title}. Press Start.`);
+  render({ allowAlarm: false });
+  revealAgendaSelection();
+}
+$("agenda-previous").addEventListener("click", () => navigateAgenda(-1));
+$("agenda-next").addEventListener("click", () => navigateAgenda(1));
+$("agenda-eject").addEventListener("click", () => {
+  if (!agenda.eject(timer.status, timer.remaining)) return;
+  cancelClick();
+  audio.stop();
+  timer.clear();
+  discardDraft();
+  syncAgendaDraft();
+  warned = false;
+  savePreferences();
+  announce("Agenda and countdown cleared.");
+  render({ allowAlarm: false });
+});
 
 function discardDraft() {
   editing = false;
@@ -232,6 +411,7 @@ function cancelClick() {
 function startTimer() {
   cancelClick();
   if (timer.status === "running") return;
+  if (!commitAgenda({ revealError: true, allowAlarm: false })) return;
   if (timer.status === "idle" && !commitEditor()) return;
   const resuming = timer.status === "paused";
   audio.stop();
@@ -241,6 +421,7 @@ function startTimer() {
     return;
   }
   audio.unlock();
+  agenda.lock();
   if (!resuming) warned = false;
   discardDraft();
   showAudioMessage();
@@ -250,6 +431,7 @@ function startTimer() {
 
 function pauseTimer() {
   cancelClick();
+  agenda.lock();
   timer.pause();
   announce("Countdown paused.");
   render();
@@ -259,16 +441,20 @@ function stopTimer() {
   cancelClick();
   audio.stop();
   timer.stop();
+  agenda.editingUnlocked = true;
   discardDraft();
   warned = false;
   announce("Countdown stopped. Remaining time is editable.");
   render({ allowAlarm: false });
+  if (agenda.visible) agendaEditor.focus();
 }
 
 function resetTimer() {
   cancelClick();
   audio.stop();
   timer.reset();
+  agenda.lock({ discard: true });
+  syncAgendaDraft();
   discardDraft();
   warned = false;
   announce("Countdown reset to your original duration.");
@@ -282,6 +468,8 @@ function clearTimer() {
   audio.cancelSelection();
   audio.stop();
   timer.clear();
+  agenda.lock({ discard: true });
+  syncAgendaDraft();
   discardDraft();
   editor.blur();
   warned = false;
@@ -427,6 +615,7 @@ document.addEventListener(
   "keydown",
   (event) => {
     if (event.code === "Space" || event.key === " ") {
+      if (event.target === agendaEditor && event.shiftKey) return;
       event.preventDefault();
       event.stopPropagation();
       if (event.repeat) return;
