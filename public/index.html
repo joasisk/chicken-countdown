@@ -135,14 +135,14 @@
             <p id="agenda-selection" class="sr-only">No agenda item selected.</p>
           </div>
           <div class="agenda-transport key-bank" role="group" aria-label="Agenda transport">
-            <button id="agenda-previous" class="cassette-key" type="button" aria-label="Previous agenda item" title="Previous item after expiry" disabled>
+            <button id="agenda-previous" class="cassette-key" type="button" aria-label="Previous agenda item" title="Load previous item" disabled>
               <span class="key-face"><svg aria-hidden="true"><use href="#icon-previous" /></svg></span><span class="key-caption">Previous</span>
             </button>
-            <button id="agenda-eject" class="cassette-key" type="button" aria-label="Clear agenda" title="Clear agenda after expiry" disabled>
+            <button id="agenda-eject" class="cassette-key" type="button" aria-label="Clear agenda" title="Clear agenda when stopped or paused" disabled>
               <span class="key-face"><svg aria-hidden="true"><use href="#icon-eject" /></svg></span><span class="key-caption">Eject</span>
             </button>
-            <button id="agenda-next" class="cassette-key" type="button" aria-label="Next agenda item" title="Next item after expiry" disabled>
-              <span class="key-face"><svg aria-hidden="true"><use href="#icon-next" /></svg></span><span class="key-caption">Next</span>
+            <button id="agenda-next" class="cassette-key" type="button" aria-label="Next agenda item" title="Finish this slot and adjust the following slots" disabled>
+              <span class="key-face"><svg aria-hidden="true"><use href="#icon-next" /></svg></span><span class="key-caption" id="agenda-next-label">Next</span>
             </button>
           </div>
         </aside>

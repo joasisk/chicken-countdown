@@ -28,7 +28,7 @@ The first-use display is **00:00**, with Dark selected and volume at 60%. Click 
 - **Space** starts, pauses, or resumes outside the agenda text field, even when another app control has focus. **Escape** cancels the timer and alarm and clears both the original and remaining duration to zero.
 - During the last ten seconds, a red glow pulses over the original digit color once per second. Pausing stops the pulse; reduced-motion preferences show a steady glow. At zero, the timer stays red, announces completion, and plays the selected sound once unless muted.
 
-Keep the tab open and your device awake. The timer uses a deadline to account for background-tab delays; browser or operating-system suspension can postpone the alarm until the app wakes. Refreshing stops the countdown and restores the selected agenda item's planned duration if an agenda has been saved.
+Keep the tab open and your device awake. The timer uses a deadline to account for background-tab delays; browser or operating-system suspension can postpone the alarm until the app wakes. Refreshing stops the countdown and restores the selected agenda item's adjusted duration if an agenda has been saved.
 
 ## Meeting agenda
 
@@ -47,7 +47,26 @@ Each duration must be exactly `MM:SS`, from `00:01` to `99:59`, followed by a sp
 
 Malformed drafts remain visible with line-specific errors and retain the last valid agenda. Even a hidden invalid draft blocks Start and reopens the display. Fix it after Stop, or discard it with Reset/Escape. Editing to empty text clears the list.
 
-**Previous / Next** are always available, including while running or paused. They select one adjacent item, stop the current countdown, silence the alarm, and load the item's planned duration. Press Start to begin that item. At either end of the list, or with an empty agenda, navigation does nothing. **Eject** is disabled only while the timer is running; it clears the agenda and timer while keeping the panel visible and locked. There is no automatic advance.
+With an agenda selected, reaching zero plays the alarm once and enters **OVERTIME**. The red digits count elapsed overtime upward until you finish the slot. Pause and Stop freeze that measurement; Resume continues it. Paused or stopped time does not count toward the slot. Without an agenda, the timer still stops at zero.
+
+**Next** finishes a started slot, silences the alarm, adjusts the schedule, and loads the next item's adjusted duration. Press Start to begin it. If the presenter finishes early, all unused time goes to the next slot. Overtime is taken from upcoming breaks first, then a final **Open discussion** slot. If those buffers are absent or exhausted, the remaining overtime is divided equally among following slots. `Open discussion` is recognized without regard to case only in the last slot.
+
+Break keywords match whole words anywhere in the title, without regard to case or accents. For example, `Team lunch together`, `Teraz prestávka`, and `Tempo per CAFFÈ` all identify breaks. Original titles retain their spelling. Accent folding accepts `káva`/`kava`, `prestávka`/`prestavka`, `caffè`/`caffe`, and `śniadanie`/`sniadanie`; `ĺ`, `ľ`, and `ł` also normalize to `l`. A keyword embedded in an unrelated word, such as `breakthrough`, does not match.
+
+| Language | Break keywords |
+| --- | --- |
+| English | lunch, break, coffee, lunchbreak, coffeebreak |
+| Slovak | prestávka, pauza, cikpauza, obed, káva |
+| German | Pause, Kaffee, Kaffeepause, Mittag, Mittagessen, Mittagspause, Raucherpause, Pinkelpause, Toilettenpause, Frühstück (also Fruehstueck) |
+| Italian | pausa, pranzo, caffè, intervallo |
+| Spanish | pausa, descanso, almuerzo, comida, café, recreo |
+| Polish | przerwa, pauza, obiad, kawa, śniadanie |
+
+Adjusted durations stop at zero. If a slot cannot absorb its equal share, the excess is shared among slots that still have time. If all following time is exhausted, the total shows the unavoidable meeting extension. Zero-duration slots can be passed with Next. On the last slot, Next is labelled **Finish** and records the slot's actual duration. There is no automatic advance.
+
+**Previous** loads the preceding item's adjusted duration without completing the current run. Browsing slots that have not started transfers no time. Next and Previous work while running, in overtime, paused, or stopped. **Reset** discards the active run's measured time and restores its timer baseline; it preserves adjustments already applied to other slots. **Eject** is disabled while counting down or measuring overtime; it clears the agenda and timer while keeping the panel visible and locked.
+
+The locked agenda displays adjusted durations, including the actual durations of finished slots. Stop exposes the original plan for editing. Committing a changed plan clears previous timing adjustments; an unchanged blur retains them. Saved adjustments and the selected slot survive refresh, while an unfinished run's elapsed time does not. Automatic gains may extend a slot beyond the manual input limit of `99:59`.
 
 The display is a native textarea with selection, copy/paste, and undo. **Space** types a normal space while this field has focus; use **Enter** to add a line. The timer's Space shortcut applies outside this field. **Escape** still clears the timer and discards pending agenda edits while preserving saved entries. Moving the caret does not change the selected meeting item. Long titles wrap beneath their title column and long lists scroll inside the black glass. The saved agenda and selected item persist with preferences; drafts, visibility, and the editing latch do not persist.
 
@@ -75,6 +94,6 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-The tests automatically use `/usr/bin/chromium` when available; set `CHROMIUM_PATH` for another installed Chromium executable. They cover masked input, Stop/Reset semantics, pointer and keyboard controls, actual MP3/custom-file playback, invalid-file handling, preferences, final-ten-second warnings, reduced motion, responsive layouts, strict agenda parsing, draft validation, navigation during running and paused countdowns, eject availability, Unicode editing, and agenda persistence. They block external requests. `SCREENSHOT_DIR=/tmp/countdown-screens npm run test:browser` also saves reference screenshots.
+The tests automatically use `/usr/bin/chromium` when available; set `CHROMIUM_PATH` for another installed Chromium executable. They cover masked input, Stop/Reset semantics, pointer and keyboard controls, actual MP3/custom-file playback, invalid-file handling, preferences, final-ten-second warnings, reduced motion, responsive layouts, strict agenda parsing, draft validation, navigation, overtime pause/resume, early completion, break/discussion deductions, equal sharing, exhausted schedules, Unicode editing, and adjusted agenda persistence. They block external requests. `SCREENSHOT_DIR=/tmp/countdown-screens npm run test:browser` also saves reference screenshots.
 
 The app binds to `127.0.0.1` by default. `HOST` and `PORT` are optional. No credentials or external services are required. The self-hosted Barlow Condensed and VT323 fonts are distributed under the SIL Open Font License; see `public/fonts/OFL.txt` and `public/fonts/VT323-OFL.txt`.

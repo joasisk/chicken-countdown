@@ -88,7 +88,7 @@ test("two-file export runs and plays its alarm over file://", async (t) => {
   assert.equal(await page.evaluate(() => document.fonts.check('20px "Agenda Pixels"')), true);
   assert.equal(await page.locator("#agenda-total").textContent(), "TOTAL 00:03");
   await page.locator("#start").click();
-  await page.waitForFunction(() => document.getElementById("timer-face").dataset.state === "finished");
+  await page.waitForFunction(() => document.getElementById("timer-face").dataset.state === "overtime");
   await page.locator("#agenda-next").click();
   assert.equal(await page.locator("#timer-display").textContent(), "00:02");
   assert.equal(await page.locator("#agenda-next").isEnabled(), true);
@@ -98,7 +98,7 @@ test("two-file export runs and plays its alarm over file://", async (t) => {
   await page.locator("#pause").click();
   assert.equal(await page.locator("#timer-face").getAttribute("data-state"), "paused");
   await page.locator("#start").click();
-  await page.waitForFunction(() => document.getElementById("timer-face").dataset.state === "finished");
+  await page.waitForFunction(() => document.getElementById("timer-face").dataset.state === "overtime");
   await page.waitForFunction(() => window.alarmForTest.currentTime > 0 && !window.alarmForTest.paused);
   assert.match(await page.evaluate(() => window.alarmForTest.src), /\/screaming-chickens\.mp3$/);
   assert.equal(await page.locator("#audio-message").isVisible(), false);
@@ -183,7 +183,7 @@ test("Windows CRLF export matches the Unix build, fits the viewport and runs wit
   }
   await page.locator("#mute").click();
   await page.locator("#start").click();
-  await page.waitForFunction(() => document.getElementById("timer-face").dataset.state === "finished");
+  await page.waitForFunction(() => document.getElementById("timer-face").dataset.state === "overtime");
   await page.locator("#agenda-next").click();
   assert.equal(await page.locator("#timer-display").textContent(), "00:02");
   assert.equal(await page.locator("#agenda-next").isEnabled(), true);

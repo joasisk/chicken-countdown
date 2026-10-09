@@ -151,6 +151,7 @@ button svg {
   letter-spacing: 0;
   font-feature-settings: "tnum" 1;
 }
+.extended-time .time-field { font-size: calc(var(--timer-size) * 0.8); }
 .time-value,
 .time-glow {
   min-width: 2.14em;

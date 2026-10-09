@@ -42,10 +42,10 @@ try {
 const agenda = new Agenda(preferences.agenda);
 const agendaEditor = $("agenda-input");
 agendaEditor.value = agenda.draftText;
-// Restoring an agenda loads its selected planned duration, never a stale run.
-if (agenda.entries.length) timer.configure(agenda.selectedDuration);
+// Restore adjusted slot budgets, never a stale running countdown.
+if (agenda.entries.length) timer.configure(agenda.selectedDuration, { allowOvertime: true });
 
-let previousStatus = "idle";
+let completionAnnounced = false;
 let warned = false;
 let editing = false;
 let editorBaseline = "00:00";
@@ -130,30 +130,34 @@ function renderSettings() {
 
 function render({ allowAlarm = true } = {}) {
   const { status, remaining } = timer.snapshot();
+  const overtime = timer.overtime;
+  const displayTime = formatTime(overtime ? Math.floor(-remaining / 1000) * 1000 : remaining);
   const value =
-    editing && status === "idle" ? editor.value : formatTime(remaining);
+    editing && status === "idle" && !overtime ? editor.value : displayTime;
   if ($("timer-display").textContent !== value) {
     $("timer-display").textContent = value;
     $("timer-glow").textContent = value;
   }
-  const [minutes, seconds] = formatTime(remaining).split(":").map(Number);
+  const [minutes, seconds] = displayTime.split(":").map(Number);
   $("timer-display").setAttribute(
     "aria-label",
-    `${minutes} minutes, ${seconds} seconds remaining`,
+    `${minutes} minutes, ${seconds} seconds ${overtime ? "overtime" : "remaining"}`,
   );
   if (!editing) {
     editor.value = formatTime(remaining);
     editorBaseline = editor.value;
   }
-  const editable = status === "idle" || status === "finished";
+  const editable = !overtime && (status === "idle" || status === "finished");
   editor.hidden = !editable;
   $("display-action").hidden = editable;
   $("display-action").setAttribute(
     "aria-label",
-    status === "paused" ? "Resume timer" : "Pause timer",
+    status === "running" ? "Pause timer" : "Resume timer",
   );
   $("status-label").textContent =
-    editing && status === "idle"
+    overtime
+      ? { running: "OVERTIME · CLICK TO PAUSE", paused: "OVERTIME PAUSED · CLICK TO RESUME", idle: "OVERTIME STOPPED · NEXT TO FINISH" }[status]
+      : editing && status === "idle"
       ? "EDIT DURATION · MM:SS"
       : {
           idle: "STOPPED · CLICK TO EDIT",
@@ -162,11 +166,11 @@ function render({ allowAlarm = true } = {}) {
           finished: "TIME’S UP · CLICK TO EDIT",
         }[status];
   $("start-label").textContent =
-    status === "paused" ? "Resume" : "Start";
+    status === "paused" || (status === "idle" && overtime) ? "Resume" : "Start";
   const draftChanged = editing && editor.value !== editorBaseline;
   $("start").disabled =
     status === "running" ||
-    (status === "idle" && remaining === 0 && !draftChanged && !agenda.dirty) ||
+    (status === "idle" && remaining === 0 && !overtime && !draftChanged && !agenda.dirty) ||
     (status === "finished" && timer.duration === 0);
   $("pause").disabled = status !== "running";
   $("stop").disabled = status === "idle" && !agenda.visible && !agenda.editingUnlocked;
@@ -191,24 +195,26 @@ function render({ allowAlarm = true } = {}) {
       `${-((1000 - (remaining % 1000)) % 1000)}ms`,
     );
   }
-  $("timer-face").classList.toggle("warning", warning || status === "finished");
+  $("timer-face").classList.toggle("warning", warning || status === "finished" || overtime);
   $("timer-face").classList.toggle("pulsing", warning && status === "running");
-  $("timer-face").dataset.state = status;
+  $("timer-face").classList.toggle("extended-time", value.length > 5);
+  $("timer-face").dataset.state = overtime && status === "running" ? "overtime" : status;
+  $("timer-face").dataset.overtime = String(overtime);
   if (warning && status === "running" && !warned) {
     warned = true;
     announce("Ten seconds or less remaining.");
   }
-  if (status === "finished" && previousStatus !== "finished") {
-    announce("Time’s up! Your countdown is complete.");
+  if ((status === "finished" || overtime) && !completionAnnounced) {
+    completionAnnounced = true;
+    announce(overtime ? "Time’s up! Overtime is being measured. Press Next when the slot ends." : "Time’s up! Your countdown is complete.");
     if (allowAlarm) void audio.play();
   }
   document.title =
     status === "running" || status === "paused"
-      ? `${formatTime(remaining)} · Chicken Countdown`
+      ? `${overtime ? "+" : ""}${displayTime} · Chicken Countdown`
       : status === "finished"
         ? "Time’s up! · Chicken Countdown"
         : "Chicken Countdown";
-  previousStatus = status;
 }
 
 function renderAgenda(status = timer.status, remaining = timer.remaining) {
@@ -219,18 +225,21 @@ function renderAgenda(status = timer.status, remaining = timer.remaining) {
   agendaEditor.readOnly = !agenda.editingUnlocked;
   setText("agenda-hint", agenda.editingUnlocked
     ? "MM:SS title · Space types a space · Enter adds a line"
-    : "PRESS STOP TO EDIT");
+    : agenda.adjusted ? "ADJUSTED TIMES · STOP TO EDIT PLAN" : "PRESS STOP TO EDIT");
   setText("agenda-total", `TOTAL ${formatTime(agenda.totalSeconds * 1000)}`);
   $("agenda-error").hidden = !agenda.errors.length;
   setText("agenda-error", agenda.errors.map(error => `Line ${error.line}: ${error.message}`).join(" "));
   agendaEditor.setAttribute("aria-invalid", String(agenda.errors.length > 0));
   const selected = agenda.entries[agenda.activeIndex];
   setText("agenda-selection", selected
-    ? `Selected item ${agenda.activeIndex + 1}: ${selected.title}.`
+    ? `Selected item ${agenda.activeIndex + 1}: ${selected.title}. Duration ${formatTime(agenda.selectedDuration)}.`
     : "No agenda item selected.");
   const permissions = agenda.permissions(status, remaining);
   for (const action of ["previous", "eject", "next"])
     $(`agenda-${action}`).disabled = !permissions[action];
+  const finalSlot = agenda.activeIndex !== null && agenda.activeIndex === agenda.entries.length - 1;
+  setText("agenda-next-label", finalSlot ? "Finish" : "Next");
+  $("agenda-next").setAttribute("aria-label", finalSlot ? "Finish agenda" : "Next agenda item");
 }
 
 // The native textarea owns caret, selection, paste and undo. An unfocused text
@@ -238,12 +247,17 @@ function renderAgenda(status = timer.status, remaining = timer.remaining) {
 let agendaMirrorText;
 function positionAgendaSelection() {
   const mirror = $("agenda-measure");
-  const nativeEditing = document.activeElement === agendaEditor;
+  const nativeEditing = agenda.editingUnlocked && document.activeElement === agendaEditor;
   $("agenda-text-region").classList.toggle("native-editing", nativeEditing);
-  if (agendaMirrorText !== agenda.draftText) {
-    agendaMirrorText = agenda.draftText;
+  let entryIndex = 0;
+  const displayText = !agenda.dirty && !agenda.editingUnlocked
+    ? agenda.draftText.replace(/^([ \t]*)\d{2}:\d{2}([ \t]+.+)$/gm,
+      (_, indent, title) => `${indent}${formatTime(agenda.durations[entryIndex++])}${title}`)
+    : agenda.draftText;
+  if (agendaMirrorText !== displayText) {
+    agendaMirrorText = displayText;
     mirror.replaceChildren();
-    for (const line of agenda.draftText.split(/\r?\n/)) {
+    for (const line of displayText.split(/\r?\n/)) {
       const row = document.createElement("div");
       row.textContent = line || "\u200b";
       mirror.append(row);
@@ -284,6 +298,11 @@ function syncAgendaDraft() {
   positionAgendaSelection();
 }
 
+function configureTimer(duration) {
+  timer.configure(duration, { allowOvertime: agenda.activeIndex !== null });
+  completionAnnounced = false;
+}
+
 function commitAgenda({ revealError = false, allowAlarm = true } = {}) {
   const result = agenda.commit();
   if (!result.valid) {
@@ -298,7 +317,7 @@ function commitAgenda({ revealError = false, allowAlarm = true } = {}) {
   }
   if (result.changed) {
     audio.stop();
-    timer.configure(result.duration);
+    configureTimer(result.duration);
     discardDraft();
     warned = false;
     savePreferences();
@@ -346,16 +365,27 @@ new ResizeObserver(positionAgendaSelection).observe(agendaEditor);
 document.fonts.ready.then(positionAgendaSelection);
 
 function navigateAgenda(offset) {
-  // Navigation can end an item early and loads the adjacent item ready to start.
-  const duration = agenda.navigate(offset, timer.status, timer.remaining);
+  const last = agenda.activeIndex === agenda.entries.length - 1;
+  if (agenda.activeIndex === null || (offset === -1 && agenda.activeIndex === 0) ||
+      (offset === 1 && last && !timer.hasStarted)) return;
+  // Only Next/Finish completes a started slot. Browsing an unstarted slot or
+  // returning to a previous one never transfers an unused budget.
+  timer.snapshot();
+  const adjustment = offset === 1 && timer.hasStarted ? agenda.finishActive(timer.elapsed) : null;
+  const finishing = offset === 1 && last;
+  const duration = finishing ? agenda.selectedDuration : agenda.navigate(offset, timer.status, timer.remaining);
   if (duration === null) return;
   cancelClick();
   audio.stop();
-  timer.configure(duration);
+  configureTimer(duration);
+  agenda.lock();
   discardDraft();
   warned = false;
   savePreferences();
-  announce(`Selected ${agenda.entries[agenda.activeIndex].title}. Press Start.`);
+  const timing = adjustment?.overtime
+    ? ` ${formatTime(adjustment.overtime)} overtime.${adjustment.unrecovered ? ` Meeting extended by ${formatTime(adjustment.unrecovered)}.` : ""}`
+    : adjustment?.saved ? ` ${formatTime(adjustment.saved)} saved${finishing ? "." : " and added to the next slot."}` : "";
+  announce(`${finishing ? "Agenda complete." : `Selected ${agenda.entries[agenda.activeIndex].title}. Press Start.`}${timing}`);
   render({ allowAlarm: false });
   revealAgendaSelection();
 }
@@ -366,6 +396,7 @@ $("agenda-eject").addEventListener("click", () => {
   cancelClick();
   audio.stop();
   timer.clear();
+  completionAnnounced = false;
   discardDraft();
   syncAgendaDraft();
   warned = false;
@@ -388,7 +419,7 @@ function commitEditor() {
   }
   try {
     const duration = durationFromInput(editor.value);
-    timer.configure(duration);
+    configureTimer(duration);
     warned = false;
     editor.value = formatTime(duration);
     editorBaseline = editor.value;
@@ -412,7 +443,8 @@ function startTimer() {
   if (timer.status === "running") return;
   if (!commitAgenda({ revealError: true, allowAlarm: false })) return;
   if (timer.status === "idle" && !commitEditor()) return;
-  const resuming = timer.status === "paused";
+  const resuming = timer.status !== "finished" && timer.hasStarted;
+  if (timer.status === "finished") completionAnnounced = false;
   audio.stop();
   if (!timer.start()) {
     showError("Set a time greater than 00:00 to start.");
@@ -421,6 +453,7 @@ function startTimer() {
   }
   audio.unlock();
   agenda.lock();
+  positionAgendaSelection();
   if (!resuming) warned = false;
   discardDraft();
   showAudioMessage();
@@ -443,7 +476,7 @@ function stopTimer() {
   agenda.editingUnlocked = true;
   discardDraft();
   warned = false;
-  announce("Countdown stopped. Remaining time is editable.");
+  announce(timer.overtime ? "Overtime stopped. Press Next to finish the slot or Resume to continue." : "Countdown stopped. Remaining time is editable.");
   render({ allowAlarm: false });
   if (agenda.visible) agendaEditor.focus();
 }
@@ -452,6 +485,7 @@ function resetTimer() {
   cancelClick();
   audio.stop();
   timer.reset();
+  completionAnnounced = false;
   agenda.lock({ discard: true });
   syncAgendaDraft();
   discardDraft();
@@ -467,6 +501,7 @@ function clearTimer() {
   audio.cancelSelection();
   audio.stop();
   timer.clear();
+  completionAnnounced = false;
   agenda.lock({ discard: true });
   syncAgendaDraft();
   discardDraft();
@@ -599,7 +634,8 @@ $("display-action").addEventListener("click", (event) => {
     clickTimeout = null;
     if (gestureInitialState === "running" && timer.status === "running")
       pauseTimer();
-    else if (gestureInitialState === "paused" && timer.status === "paused")
+    else if ((gestureInitialState === "paused" && timer.status === "paused") ||
+             (gestureInitialState === "idle" && timer.overtime))
       startTimer();
   }, 300);
 });

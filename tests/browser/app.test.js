@@ -868,9 +868,9 @@ test("instrument interface works in Chromium without external services", async (
     await setAgenda(page, '00:01 Welcome\n00:02 Discussion\n00:03 Wrap-up');
     await page.locator('#start').click();
     await advance(page, 1000);
-    await waitState(page, 'finished');
+    await waitState(page, 'overtime');
     await page.waitForFunction(() => !window.__alarmAudio.paused && window.__alarmAudio.currentTime > 0);
-    await assertTransport(page, true, true, true);
+    await assertTransport(page, true, false, true);
     await page.locator('#agenda-next').click();
     assert.equal(await page.locator('#timer-display').textContent(), '00:02');
     assert.equal(await page.locator('#timer-face').getAttribute('data-state'), 'idle');
@@ -883,23 +883,24 @@ test("instrument interface works in Chromium without external services", async (
     await page.locator('#mute').click();
     await page.locator('#start').click();
     await advance(page, 2000);
-    await waitState(page, 'finished');
-    await assertTransport(page, true, true, true);
+    await waitState(page, 'overtime');
+    await assertTransport(page, true, false, true);
     await page.locator('#agenda-previous').click();
     assert.equal(await page.locator('#timer-display').textContent(), '00:01');
     await assertTransport(page, true, true, true);
     for (const seconds of [1, 2]) {
       await page.locator('#start').click();
       await advance(page, seconds * 1000);
-      await waitState(page, 'finished');
+      await waitState(page, 'overtime');
       await page.locator('#agenda-next').click();
       await assertTransport(page, true, true, true);
     }
     await page.locator('#start').click();
     await advance(page, 3000);
-    await waitState(page, 'finished');
-    await assertTransport(page, true, true, true);
+    await waitState(page, 'overtime');
+    await assertTransport(page, true, false, true);
     await screenshot(page, 'agenda-expired');
+    await page.locator('#pause').click();
     await page.locator('#agenda-eject').click();
     assert.equal(await page.locator('#agenda-panel').isVisible(), true);
     assert.equal(await page.locator('#agenda-input').inputValue(), '');
@@ -927,7 +928,7 @@ test("instrument interface works in Chromium without external services", async (
     await waitState(page, 'running');
     await page.locator('#agenda-next').click();
     await waitState(page, 'idle');
-    assert.equal(await page.locator('#timer-display').textContent(), '10:00');
+    assert.equal(await page.locator('#timer-display').textContent(), '14:30');
     await advance(page, 600000);
     await waitState(page, 'idle');
     assert.equal(await page.evaluate(() => window.__audiblePlays), 0);
@@ -935,7 +936,7 @@ test("instrument interface works in Chromium without external services", async (
     await page.locator('#pause').click();
     await assertTransport(page, true, true, true);
     await page.locator('#agenda-previous').click();
-    assert.equal(await page.locator('#timer-display').textContent(), '05:00');
+    assert.equal(await page.locator('#timer-display').textContent(), '00:30');
     await page.locator('#start').click();
     await page.locator('#pause').click();
     await page.locator('#agenda-eject').click();
@@ -1024,7 +1025,7 @@ test("instrument interface works in Chromium without external services", async (
     await page.keyboard.press('Space');
     await waitState(page, 'running');
     await advance(page, 1000);
-    await waitState(page, 'finished');
+    await waitState(page, 'overtime');
     await page.locator('#agenda-next').focus();
     await page.keyboard.press('Enter');
     assert.equal(await page.locator('#timer-display').textContent(), '00:02');
@@ -1042,13 +1043,146 @@ test("instrument interface works in Chromium without external services", async (
     assert.deepEqual(errors, []);
   });
 
+  await t.test('overtime counts up, pauses precisely, alarms once, and reduces breaks on Next', async (t) => {
+    const { page, errors } = await open(t);
+    await setAgenda(page, '01:00 Talk\n03:00 Next\n01:00 Coffee break\n02:00 Open discussion');
+    await page.locator('#start').click();
+    await advance(page, 75000);
+    await waitState(page, 'overtime');
+    assert.equal(await page.locator('#timer-display').textContent(), '00:15');
+    assert.match(await page.locator('#status-label').textContent(), /^OVERTIME/);
+    assert.match(await page.locator('#timer-display').getAttribute('aria-label'), /15 seconds overtime/);
+    assert.equal(await page.title(), '+00:15 · Chicken Countdown');
+    await page.waitForFunction(() => window.__audiblePlays === 1);
+    await page.locator('#pause').click();
+    await advance(page, 120000);
+    await waitState(page, 'paused');
+    assert.equal(await page.locator('#timer-display').textContent(), '00:15');
+    await page.locator('#start').click();
+    await advance(page, 5000);
+    await page.waitForFunction(() => document.getElementById('timer-display').textContent === '00:20');
+    assert.equal(await page.evaluate(() => window.__audiblePlays), 1);
+    await page.locator('#agenda-next').click();
+    assert.equal(await page.locator('#timer-display').textContent(), '03:00');
+    assert.match(await page.locator('#agenda-measure').textContent(), /00:40 Coffee break/);
+    assert.match(await page.locator('#agenda-input').inputValue(), /01:00 Coffee break/);
+    assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 07:00');
+    await page.reload();
+    await page.locator('#agenda-toggle').click();
+    assert.match(await page.locator('#agenda-measure').textContent(), /00:40 Coffee break/);
+    await page.locator('#agenda-next').click();
+    assert.equal(await page.locator('#timer-display').textContent(), '00:40');
+    assert.deepEqual(errors, []);
+  });
+
+  await t.test('multilingual break words anywhere in titles absorb overtime and preserve original spelling', async (t) => {
+    const { page, errors } = await open(t);
+    const titles = ['Team lunch together', 'Teraz PRESTÁVKA', 'Jetzt Mittagspause', 'Tempo per CAFFÈ', 'Ahora café', 'Teraz ŚNIADANIE'];
+    const text = ['01:00 Talk', '03:00 Next', ...titles.map(title => `00:20 ${title}`), '02:00 Open discussion'].join('\n');
+    await setAgenda(page, text);
+    await page.locator('#start').click();
+    await page.evaluate(() => {
+      window.__timeOffset += 190000;
+      document.getElementById('agenda-next').click();
+    });
+    assert.equal(await page.locator('#timer-display').textContent(), '03:00');
+    const adjusted = await page.locator('#agenda-measure').textContent();
+    for (const title of titles) assert.ok(adjusted.includes(`00:00 ${title}`), title);
+    assert.ok(adjusted.includes('01:50 Open discussion'));
+    assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 08:00');
+    assert.equal(await page.locator('#agenda-input').inputValue(), text);
+    await page.reload();
+    await page.locator('#agenda-toggle').click();
+    assert.equal(await page.locator('#agenda-input').inputValue(), text);
+    assert.ok((await page.locator('#agenda-measure').textContent()).includes('00:00 Teraz ŚNIADANIE'));
+    assert.deepEqual(errors, []);
+  });
+
+  await t.test('Next snapshots late clicks, uses final open discussion, and divides overtime without buffers', async (t) => {
+    const { page, errors } = await open(t);
+    for (const [text, expected, rows] of [
+      ['01:00 Talk\n03:00 Next\n02:00 Open discussion', '03:00', ['01:00 Open discussion']],
+      ['01:00 Talk\n03:00 Next\n02:00 Last', '02:30', ['01:30 Last']],
+    ]) {
+      await setAgenda(page, text);
+      await page.locator('#agenda-previous').click();
+      await page.locator('#start').click();
+      // Click in the same event before the animation frame refreshes the timer.
+      await page.evaluate(() => {
+        window.__timeOffset += 120000;
+        document.getElementById('agenda-next').click();
+      });
+      assert.equal(await page.locator('#timer-display').textContent(), expected);
+      for (const row of rows) assert.ok((await page.locator('#agenda-measure').textContent()).includes(row));
+      assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 06:00');
+    }
+    assert.equal(await page.evaluate(() => window.__audiblePlays), 0);
+    assert.deepEqual(errors, []);
+  });
+
+  await t.test('Stop preserves early savings and overtime; reset and unstarted navigation make no transfers', async (t) => {
+    const { page, errors } = await open(t);
+    await setAgenda(page, '01:00 Talk\n02:00 Next\n03:00 Last');
+    await page.locator('#start').click();
+    await advance(page, 20000);
+    await page.locator('#stop').click();
+    await advance(page, 600000);
+    await page.locator('#agenda-next').click();
+    assert.equal(await page.locator('#timer-display').textContent(), '02:40');
+    await page.locator('#agenda-next').click();
+    assert.equal(await page.locator('#timer-display').textContent(), '03:00');
+    await page.locator('#agenda-previous').click();
+    assert.equal(await page.locator('#timer-display').textContent(), '02:40');
+    await page.locator('#start').click();
+    await advance(page, 200000);
+    await page.locator('#stop').click();
+    assert.equal(await page.locator('#timer-display').textContent(), '00:40');
+    await advance(page, 120000);
+    await page.locator('#agenda-next').click();
+    assert.equal(await page.locator('#timer-display').textContent(), '02:20');
+    await page.locator('#start').click();
+    await advance(page, 200000);
+    await page.locator('#reset').click();
+    assert.equal(await page.locator('#timer-display').textContent(), '02:20');
+    await page.locator('#agenda-next').click();
+    assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 06:00');
+    assert.deepEqual(errors, []);
+  });
+
+  await t.test('exhausted slots stay at zero and Finish records an unavoidable meeting extension', async (t) => {
+    const { page, errors } = await open(t);
+    await setAgenda(page, '01:00 Talk\n00:10 Break\n00:20 Last');
+    await page.locator('#start').click();
+    await advance(page, 120000);
+    await page.locator('#agenda-next').click();
+    assert.equal(await page.locator('#timer-display').textContent(), '00:00');
+    assert.equal(await page.locator('#start').isDisabled(), true);
+    assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 02:00');
+    assert.match(await page.locator('#announcer').textContent(), /Meeting extended by 00:30/);
+    await page.locator('#agenda-next').click();
+    assert.equal(await page.locator('#timer-display').textContent(), '00:00');
+    await page.locator('#agenda-previous').click();
+    await page.locator('#agenda-previous').click();
+    await page.locator('#stop').click();
+    await page.locator('#agenda-input').fill('01:00 Only');
+    await page.locator('#agenda-input').blur();
+    await page.locator('#start').click();
+    await advance(page, 90000);
+    await page.locator('#agenda-next').click();
+    assert.equal(await page.locator('#agenda-next-label').textContent(), 'Finish');
+    assert.equal(await page.locator('#timer-face').getAttribute('data-state'), 'idle');
+    assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 01:30');
+    assert.match(await page.locator('#announcer').textContent(), /Agenda complete/);
+    assert.deepEqual(errors, []);
+  });
+
   await t.test('agenda reload restores the selected duration read-only and manual timer edits preserve its plan', async (t) => {
     const { page, errors } = await open(t);
     await setAgenda(page, '00:01 First\n10:00 Discussion\n08:00 Decisions');
     await page.locator('#mute').click();
     await page.locator('#start').click();
     await advance(page, 1000);
-    await waitState(page, 'finished');
+    await waitState(page, 'overtime');
     await page.locator('#agenda-next').click();
     await page.locator('#theme-light').click();
     await page.reload();
