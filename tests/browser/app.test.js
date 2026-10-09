@@ -1075,6 +1075,96 @@ test("instrument interface works in Chromium without external services", async (
     assert.deepEqual(errors, []);
   });
 
+  await t.test('overtime label and transparent outlined digits appear without moving the layout', async (t) => {
+    const { page, errors } = await open(t);
+    await setAgenda(page, '00:15 Talk\n01:00 Next');
+    const geometry = () => page.evaluate(() => ['time-field', 'timer-display', 'agenda-panel', 'control-dock'].map(id => {
+      const box = document.getElementById(id).getBoundingClientRect();
+      return { id, x: box.x + scrollX, y: box.y + scrollY, width: box.width, height: box.height };
+    }));
+    for (const theme of ['dark', 'light']) {
+      await page.locator(`#theme-${theme}`).click();
+      for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }, { width: 320, height: 568 }]) {
+        await page.setViewportSize(viewport);
+        await page.locator('#reset').click();
+        await page.locator('#start').click();
+        assert.equal(await page.locator('#overtime-label').isVisible(), false);
+        const before = await geometry();
+        await advance(page, 20000);
+        await waitState(page, 'overtime');
+        assert.equal(await page.locator('#overtime-label').isVisible(), true);
+        assert.equal(await page.locator('#overtime-label').textContent(), 'OVERTIME');
+        assert.deepEqual(await geometry(), before);
+        const label = await page.locator('#overtime-label').boundingBox();
+        const digits = await page.locator('#timer-display').boundingBox();
+        assert.ok(label.y + label.height <= digits.y);
+        const styles = await page.locator('#timer-display, #timer-glow').evaluateAll(elements => elements.map(element => {
+          const style = getComputedStyle(element);
+          return { background: style.backgroundImage, fill: style.webkitTextFillColor, stroke: style.webkitTextStrokeWidth,
+            color: style.webkitTextStrokeColor, labelColor: getComputedStyle(document.getElementById('overtime-label')).color };
+        }));
+        for (const style of styles) {
+          assert.equal(style.background, 'none');
+          assert.equal(style.fill, 'rgba(0, 0, 0, 0)');
+          assert.equal(style.stroke, '10px');
+          assert.equal(style.color, style.labelColor);
+        }
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+        if (viewport.width === 1280) await screenshot(page, `overtime-outline-${theme}`);
+        if (viewport.width === 390) await screenshot(page, `overtime-outline-mobile-${theme}`);
+        await page.locator('#pause').click();
+        assert.equal(await page.locator('#overtime-label').isVisible(), true);
+        await page.locator('#stop').click();
+        assert.equal(await page.locator('#overtime-label').isVisible(), true);
+      }
+    }
+    await page.locator('#agenda-next').click();
+    assert.equal(await page.locator('#overtime-label').isVisible(), false);
+    assert.equal(await page.locator('#timer-display').evaluate(el => getComputedStyle(el).webkitTextStrokeWidth), '0px');
+    assert.deepEqual(errors, []);
+  });
+
+  await t.test('recognized breaks glow green while active and paused, including a green halo in overtime', async (t) => {
+    for (const [theme, green] of [['dark', 'rgb(145, 237, 174)'], ['light', 'rgb(39, 136, 78)']]) {
+      const { page, errors } = await open(t, { reducedMotion: 'reduce' });
+      await page.locator(`#theme-${theme}`).click();
+      await setAgenda(page, '00:20 Teraz KÁVA\n00:20 Next talk');
+      const glow = () => page.locator('#timer-glow').evaluate(element => {
+        const style = getComputedStyle(element);
+        return { gradient: style.backgroundImage, opacity: Number(style.opacity), filter: style.filter, animation: style.animationName };
+      });
+      assert.equal((await glow()).opacity, 0);
+      await page.locator('#start').click();
+      let style = await glow();
+      assert.ok(style.gradient.includes(green));
+      assert.ok(style.opacity > 0.8);
+      assert.ok(style.filter.includes('drop-shadow'));
+      await screenshot(page, `break-green-${theme}`);
+      await page.locator('#pause').click();
+      style = await glow();
+      assert.ok(style.gradient.includes(green));
+      assert.ok(style.opacity > 0.8);
+      assert.equal(style.animation, 'none');
+      await page.locator('#start').click();
+      await advance(page, 25000);
+      await waitState(page, 'overtime');
+      assert.equal(await page.locator('#overtime-label').isVisible(), true);
+      style = await glow();
+      assert.equal(style.gradient, 'none');
+      assert.ok(style.filter.includes('drop-shadow'));
+      assert.equal(await page.locator('#timer-face').evaluate(el => getComputedStyle(el).getPropertyValue('--glow-solid').trim()),
+        theme === 'dark' ? '#68df98' : '#237d48');
+      assert.equal(await page.locator('#timer-display').evaluate(el => getComputedStyle(el).webkitTextStrokeWidth), '10px');
+      await screenshot(page, `break-overtime-${theme}`);
+      await page.locator('#agenda-next').click();
+      assert.equal((await glow()).opacity, 0);
+      assert.equal(await page.locator('#overtime-label').isVisible(), false);
+      await page.locator('#start').click();
+      assert.equal((await glow()).opacity, 0);
+      assert.deepEqual(errors, []);
+    }
+  });
+
   await t.test('multilingual break words anywhere in titles absorb overtime and preserve original spelling', async (t) => {
     const { page, errors } = await open(t);
     const titles = ['Team lunch together', 'Teraz PRESTÁVKA', 'Jetzt Mittagspause', 'Tempo per CAFFÈ', 'Ahora café', 'Teraz ŚNIADANIE'];

@@ -1,6 +1,6 @@
 import { Countdown, durationFromInput, formatTime } from "./timer.js";
 import { AlarmAudio } from "./audio.js";
-import { Agenda } from "./agenda.js";
+import { Agenda, isBreakTitle } from "./agenda.js";
 
 const $ = (id) => document.getElementById(id);
 const timer = new Countdown();
@@ -131,6 +131,10 @@ function renderSettings() {
 function render({ allowAlarm = true } = {}) {
   const { status, remaining } = timer.snapshot();
   const overtime = timer.overtime;
+  const breakActive = (status === "running" || status === "paused") &&
+    isBreakTitle(agenda.entries[agenda.activeIndex]?.title || "");
+  $("overtime-label").hidden = !overtime;
+  $("timer-face").classList.toggle("break-active", breakActive);
   const displayTime = formatTime(overtime ? Math.floor(-remaining / 1000) * 1000 : remaining);
   const value =
     editing && status === "idle" && !overtime ? editor.value : displayTime;

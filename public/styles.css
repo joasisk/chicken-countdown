@@ -21,6 +21,9 @@
   --warning-top: #ff7a75;
   --warning-bottom: #e65a5a;
   --warning-solid: #f56e69;
+  --break-top: #91edae;
+  --break-bottom: #41c77d;
+  --break-solid: #68df98;
   --surface-top: #272c33;
   --surface-bottom: #20252b;
   --edge: #3e4650;
@@ -51,6 +54,9 @@
   --warning-top: #c53a3e;
   --warning-bottom: #a5232d;
   --warning-solid: #b22d35;
+  --break-top: #27884e;
+  --break-bottom: #176538;
+  --break-solid: #237d48;
   --surface-top: #e8ebee;
   --surface-bottom: #d6dbe0;
   --edge: #adb5bf;
@@ -133,9 +139,17 @@ button svg {
   padding-top: 3vh;
 }
 .timer-face {
+  --glow-top: var(--warning-top);
+  --glow-bottom: var(--warning-bottom);
+  --glow-solid: var(--warning-solid);
   width: 100%;
   text-align: center;
   transform: none;
+}
+.break-active {
+  --glow-top: var(--break-top);
+  --glow-bottom: var(--break-bottom);
+  --glow-solid: var(--break-solid);
 }
 .time-field {
   --timer-size: min(28vw, 380px);
@@ -152,6 +166,20 @@ button svg {
   font-feature-settings: "tnum" 1;
 }
 .extended-time .time-field { font-size: calc(var(--timer-size) * 0.8); }
+.overtime-label {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  width: 100%;
+  margin: 0 0 8px;
+  font-family: ui-sans-serif, sans-serif;
+  font-size: clamp(14px, 1.25vw, 18px);
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: 0.2em;
+  color: var(--warning-solid);
+  pointer-events: none;
+}
 .time-value,
 .time-glow {
   min-width: 2.14em;
@@ -167,8 +195,8 @@ button svg {
   position: absolute;
   inset: 0;
   background-image: linear-gradient(
-    var(--warning-top) 15%,
-    var(--warning-bottom) 85%
+    var(--glow-top) 15%,
+    var(--glow-bottom) 85%
   );
   opacity: 0;
 }
@@ -232,20 +260,28 @@ button svg {
   width: 100%;
   margin: 12px 0 0;
 }
-.warning .time-glow {
+.warning .time-glow,
+.break-active .time-glow {
   opacity: 0.94;
   filter:
     drop-shadow(
-      0 0 0.025em color-mix(in srgb, var(--warning-solid) 60%, transparent)
+      0 0 0.025em color-mix(in srgb, var(--glow-solid) 60%, transparent)
     )
     drop-shadow(
-      0 0 0.09em color-mix(in srgb, var(--warning-solid) 35%, transparent)
+      0 0 0.09em color-mix(in srgb, var(--glow-solid) 35%, transparent)
     );
 }
 .pulsing .time-glow {
   animation: warning-pulse 1s ease-out infinite;
   animation-delay: var(--pulse-delay, 0ms);
   will-change: opacity;
+}
+.timer-face[data-overtime="true"] .time-value,
+.timer-face[data-overtime="true"] .time-glow {
+  background: none;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  -webkit-text-stroke: 10px var(--warning-solid);
 }
 @keyframes warning-pulse {
   0%,
@@ -284,8 +320,6 @@ button svg {
   to { opacity: 1; transform: translateX(0); }
 }
 .agenda-glass {
-  /* Keep pixel glyphs on their own paint layer across theme changes. */
-  transform: translateZ(0);
   isolation: isolate;
   color-scheme: dark;
   color: #fff;
