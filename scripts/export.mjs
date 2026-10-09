@@ -4,7 +4,9 @@ import path from "node:path";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const destination = path.resolve(process.argv[2] || path.join(root, "dist"));
-const read = (name) => readFile(path.join(root, "public", name), "utf8");
+// Windows checkouts can use CRLF; normalize before matching source markup/imports.
+const read = async (name) => (await readFile(path.join(root, "public", name), "utf8"))
+  .replace(/\r\n?/g, "\n");
 const icon = await read("chicken.svg");
 const licenses = await Promise.all([read("fonts/OFL.txt"), read("fonts/VT323-OFL.txt")]);
 let css = await read("styles.css");
