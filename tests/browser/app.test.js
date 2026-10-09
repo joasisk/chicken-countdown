@@ -949,29 +949,42 @@ test("instrument interface works in Chromium without external services", async (
     assert.deepEqual(errors, []);
   });
 
-  await t.test('native textarea editing and global shortcuts work with textarea and transport focus', async (t) => {
+  await t.test('Space types in the agenda while timer shortcuts work outside the text field', async (t) => {
     const { page, errors } = await open(t);
     await page.locator('#agenda-toggle').click();
     await page.locator('#stop').click();
     const input = page.locator('#agenda-input');
     await input.pressSequentially('00:01');
-    await input.press('Shift+Space');
+    await input.press('Space');
     await input.pressSequentially('Úvod');
     await input.press('Enter');
     await input.pressSequentially('00:02');
-    await input.press('Shift+Space');
+    await input.press('Space');
     await input.pressSequentially('Café');
     assert.equal(await input.inputValue(), '00:01 Úvod\n00:02 Café');
+    assert.equal(await page.locator('#timer-face').getAttribute('data-state'), 'idle');
+    assert.equal(await input.evaluate(el => el.readOnly), false);
     await input.press('ControlOrMeta+z');
     assert.notEqual(await input.inputValue(), '00:01 Úvod\n00:02 Café');
     await input.fill('00:01 Úvod\n00:02 Café');
     await input.press('Space');
+    assert.equal(await input.inputValue(), '00:01 Úvod\n00:02 Café ');
+    assert.equal(await page.locator('#timer-face').getAttribute('data-state'), 'idle');
+    await input.press('Backspace');
+    await page.locator('#start').click();
     await waitState(page, 'running');
     assert.equal(await input.evaluate(el => el.readOnly), true);
     await input.focus();
     await input.press('Space');
+    assert.equal(await page.locator('#timer-face').getAttribute('data-state'), 'running');
+    assert.equal(await input.inputValue(), '00:01 Úvod\n00:02 Café');
+    await page.locator('#pause').click();
     await waitState(page, 'paused');
+    await input.focus();
     await input.press('Space');
+    assert.equal(await page.locator('#timer-face').getAttribute('data-state'), 'paused');
+    await page.locator('#start').focus();
+    await page.keyboard.press('Space');
     await waitState(page, 'running');
     await advance(page, 1000);
     await waitState(page, 'finished');

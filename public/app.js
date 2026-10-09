@@ -218,7 +218,7 @@ function renderAgenda(status = timer.status, remaining = timer.remaining) {
   $("agenda-toggle").setAttribute("aria-expanded", String(agenda.visible));
   agendaEditor.readOnly = !agenda.editingUnlocked;
   setText("agenda-hint", agenda.editingUnlocked
-    ? "MM:SS title · Shift+Space types a space · Enter adds a line"
+    ? "MM:SS title · Space types a space · Enter adds a line"
     : "PRESS STOP TO EDIT");
   setText("agenda-total", `TOTAL ${formatTime(agenda.totalSeconds * 1000)}`);
   $("agenda-error").hidden = !agenda.errors.length;
@@ -615,7 +615,7 @@ document.addEventListener(
   "keydown",
   (event) => {
     if (event.code === "Space" || event.key === " ") {
-      if (event.target === agendaEditor && event.shiftKey) return;
+      if (event.target === agendaEditor) return;
       event.preventDefault();
       event.stopPropagation();
       if (event.repeat) return;

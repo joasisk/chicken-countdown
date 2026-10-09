@@ -25,7 +25,7 @@ The first-use display is **00:00**, with Dark selected and volume at 60%. Click 
 - **Start / Resume** counts down from the displayed time. **Pause** freezes it precisely.
 - **Stop** keeps the remainder editable and preserves the original duration. **Reset** restores that original duration. Focusing an unchanged stopped remainder does not overwrite the original.
 - Click running digits to pause; click paused digits to resume. Double-click running digits to stop and restore the original duration.
-- **Space** starts, pauses, or resumes, even when another app control has focus. **Escape** cancels the timer and alarm and clears both the original and remaining duration to zero.
+- **Space** starts, pauses, or resumes outside the agenda text field, even when another app control has focus. **Escape** cancels the timer and alarm and clears both the original and remaining duration to zero.
 - During the last ten seconds, a red glow pulses over the original digit color once per second. Pausing stops the pulse; reduced-motion preferences show a steady glow. At zero, the timer stays red, announces completion, and plays the selected sound once unless muted.
 
 Keep the tab open and your device awake. The timer uses a deadline to account for background-tab delays; browser or operating-system suspension can postpone the alarm until the app wakes. Refreshing stops the countdown and restores the selected agenda item's planned duration if an agenda has been saved.
@@ -49,7 +49,7 @@ Malformed drafts remain visible with line-specific errors and retain the last va
 
 **Previous / Eject / Next** are available only after the countdown naturally expires. Previous/Next select one adjacent item, silence the alarm, load its planned duration, and immediately disable all three keys until another expiration. Press Start to begin that item. Eject clears the agenda and timer while keeping the panel visible and locked. There is no automatic advance.
 
-The display is a native textarea with selection, copy/paste, and undo. **Space** controls the timer even while it has focus; use **Shift+Space** to type a space and **Enter** to add a line. Moving the caret does not change the selected meeting item. Long titles wrap beneath their title column and long lists scroll inside the black glass. The saved agenda and selected item persist with preferences; drafts, visibility, and the editing latch do not persist.
+The display is a native textarea with selection, copy/paste, and undo. **Space** types a normal space while this field has focus; use **Enter** to add a line. The timer's Space shortcut applies outside this field. **Escape** still clears the timer and discards pending agenda edits while preserving saved entries. Moving the caret does not change the selected meeting item. Long titles wrap beneath their title column and long lists scroll inside the black glass. The saved agenda and selected item persist with preferences; drafts, visibility, and the editing latch do not persist.
 
 ## Sound and theme
 
