@@ -891,6 +891,40 @@ test("instrument interface works in Chromium without external services", async (
     assert.deepEqual(errors, []);
   });
 
+  await t.test('the current slot title uses the agenda font and follows the selected slot', async (t) => {
+    const { page, errors } = await open(t, { mobile: true });
+    const title = page.locator('#agenda-slot-title');
+    assert.equal(await title.isVisible(), false);
+    const first = 'Úvod — café! Discussion with a long title that wraps on smaller screens';
+    await page.locator('#agenda-toggle').click();
+    await page.locator('#stop').click();
+    await page.locator('#agenda-input').fill(`05:00 ${first}\n10:00 Team discussion`);
+    await page.locator('#start').click();
+    assert.equal(await page.locator('#timer-face').getAttribute('data-state'), 'running');
+    assert.equal(await title.textContent(), first);
+    const titleBox = await title.boundingBox();
+    const digits = await page.locator('#timer-display').boundingBox();
+    assert.ok(titleBox.y + titleBox.height <= digits.y);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    assert.equal(
+      await title.evaluate(el => getComputedStyle(el).fontFamily),
+      await page.locator('#agenda-input').evaluate(el => getComputedStyle(el).fontFamily),
+    );
+    await page.locator('#agenda-next').click();
+    assert.equal(await title.textContent(), 'Team discussion');
+    await page.locator('#agenda-previous').click();
+    assert.equal(await title.textContent(), first);
+    await page.locator('#agenda-toggle').click();
+    assert.equal(await title.isVisible(), true);
+    await page.reload();
+    assert.equal(await title.textContent(), first);
+    assert.equal(await title.isVisible(), true);
+    await page.locator('#agenda-toggle').click();
+    await page.locator('#agenda-eject').click();
+    assert.equal(await title.isVisible(), false);
+    assert.deepEqual(errors, []);
+  });
+
   await t.test('natural expiry and repeated navigation acknowledge sound, and Eject clears silently', async (t) => {
     const { page, errors } = await open(t);
     await setAgenda(page, '00:01 Welcome\n00:02 Discussion\n00:03 Wrap-up');
@@ -1123,8 +1157,10 @@ test("instrument interface works in Chromium without external services", async (
         assert.equal(await page.locator('#overtime-label').isVisible(), true);
         assert.equal(await page.locator('#overtime-label').textContent(), 'OVERTIME');
         assert.deepEqual(await geometry(), before);
+        const title = await page.locator('#agenda-slot-title').boundingBox();
         const label = await page.locator('#overtime-label').boundingBox();
         const digits = await page.locator('#timer-display').boundingBox();
+        assert.ok(title.y + title.height <= label.y);
         assert.ok(label.y + label.height <= digits.y);
         const styles = await page.locator('#timer-display, #timer-glow').evaluateAll(elements => elements.map(element => {
           const style = getComputedStyle(element);

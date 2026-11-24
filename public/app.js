@@ -235,6 +235,13 @@ function renderAgenda(status = timer.status, remaining = timer.remaining) {
   setText("agenda-error", agenda.errors.map(error => `Line ${error.line}: ${error.message}`).join(" "));
   agendaEditor.setAttribute("aria-invalid", String(agenda.errors.length > 0));
   const selected = agenda.entries[agenda.activeIndex];
+  const slotTitle = $("agenda-slot-title");
+  const title = selected?.title ?? "";
+  // Keep pressed controls in place when a draft commits on blur.
+  if (slotTitle.textContent !== title && !document.querySelector("button:active, input:active")) {
+    slotTitle.textContent = title;
+    slotTitle.hidden = !selected;
+  }
   setText("agenda-selection", selected
     ? `Selected item ${agenda.activeIndex + 1}: ${selected.title}. Duration ${formatTime(agenda.selectedDuration)}.`
     : "No agenda item selected.");

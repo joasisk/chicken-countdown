@@ -49,6 +49,8 @@ Each duration must be exactly `MM:SS`, from `00:01` to `99:59`, followed by a sp
 
 Malformed drafts remain visible with line-specific errors and retain the last valid agenda. Even a hidden invalid draft blocks Start and reopens the display. Fix it after Stop, or discard it with Reset/Escape. Editing to empty text clears the list.
 
+The selected slot’s title appears above the countdown, including when the agenda panel is closed.
+
 With an agenda selected, reaching zero plays the alarm once and enters **OVERTIME**. A small **OVERTIME** label appears above the timer in the existing whitespace, without shifting the layout. The digits have a transparent fill and a 10px red outline and count elapsed overtime upward until you finish the slot. Pause and Stop freeze that measurement; Resume continues it. Paused or stopped time does not count toward the slot. Without an agenda, the timer still stops at zero.
 
 An active break slot gives the timer a green glow, including while paused. It uses the same multilingual, accent-insensitive title recognition as overtime redistribution. If a break runs into overtime, its digits show the red outline with the green glow.

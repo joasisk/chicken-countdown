@@ -300,6 +300,23 @@ button svg {
   font-style: normal;
   font-display: swap;
 }
+.agenda-slot-title,
+.agenda-glass {
+  font-family: "Agenda Pixels", "DejaVu Sans Mono", "Courier New", monospace;
+  font-weight: 400;
+}
+.agenda-slot-title {
+  width: min(100%, 1180px);
+  margin: max(16px, env(safe-area-inset-top)) auto 0;
+  color: var(--digit-solid);
+  font-size: clamp(24px, 3.6vw, 48px);
+  line-height: 1.15;
+  text-align: center;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+.agenda-slot-title:not([hidden]) + .timer-stage { padding-top: 12px; }
 .timer-stage.has-agenda {
   grid-template-columns: minmax(0, 7fr) minmax(280px, 3fr);
   gap: 32px;
@@ -328,9 +345,7 @@ button svg {
   border-radius: 4px;
   box-shadow: inset 0 2px 8px #000, 0 1px 0 #ffffff14;
   padding: 14px 12px 12px;
-  font-family: "Agenda Pixels", "DejaVu Sans Mono", "Courier New", monospace;
   font-size: 20px;
-  font-weight: 400;
   line-height: 1.4;
   font-variant-numeric: tabular-nums;
 }
