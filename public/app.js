@@ -409,7 +409,7 @@ function navigateAgenda(offset) {
   savePreferences();
   const timing = adjustment?.overtime
     ? ` ${formatTime(adjustment.overtime)} overtime.${adjustment.unrecovered ? ` Meeting extended by ${formatTime(adjustment.unrecovered)}.` : ""}`
-    : adjustment?.saved ? ` ${formatTime(adjustment.saved)} saved${finishing ? "." : " and added to the next slot."}` : "";
+    : adjustment?.saved ? ` ${formatTime(adjustment.saved)} saved${finishing ? "." : " and shared across upcoming slots."}` : "";
   announce(`${finishing ? "Agenda complete." : `Selected ${agenda.entries[agenda.activeIndex].title}. Press Start.`}${timing}`);
   render({ allowAlarm: false });
   revealAgendaSelection();

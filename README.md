@@ -53,9 +53,9 @@ The selected slot’s title appears above the countdown, including when the agen
 
 With an agenda selected, reaching zero plays the alarm once and enters **OVERTIME**. A small **OVERTIME** label appears above the timer in the existing whitespace, without shifting the layout. The digits have a transparent fill and a 10px red outline and count elapsed overtime upward until you finish the slot. Pause and Stop freeze that measurement; Resume continues it. Paused or stopped time does not count toward the slot. Without an agenda, the timer still stops at zero.
 
-An active break slot gives the timer a green glow, including while paused. It uses the same multilingual, accent-insensitive title recognition as overtime redistribution. If a break runs into overtime, its digits show the red outline with the green glow.
+An active break slot gives the timer a green glow, including while paused. If a break runs into overtime, its digits show the red outline with the green glow.
 
-**Next** finishes a started slot, silences the alarm, adjusts the schedule, and loads the next item's adjusted duration. Press Start to begin it. If the presenter finishes early, all unused time goes to the next slot. Overtime is taken from upcoming breaks first, then a final **Open discussion** slot. If those buffers are absent or exhausted, the remaining overtime is divided equally among following slots. `Open discussion` is recognized without regard to case only in the last slot.
+**Next** finishes a started slot, silences the alarm, adjusts the schedule, and loads the next item's adjusted duration. Press Start to begin it. Upcoming slots, including breaks and open discussion, share overtime deductions and unused time in proportion to their current adjusted durations.
 
 Break keywords match whole words anywhere in the title, without regard to case or accents. For example, `Team lunch together`, `Teraz prestávka`, and `Tempo per CAFFÈ` all identify breaks. Original titles retain their spelling. Accent folding accepts `káva`/`kava`, `prestávka`/`prestavka`, `caffè`/`caffe`, and `śniadanie`/`sniadanie`; `ĺ`, `ľ`, and `ł` also normalize to `l`. A keyword embedded in an unrelated word, such as `breakthrough`, does not match.
 
@@ -68,7 +68,7 @@ Break keywords match whole words anywhere in the title, without regard to case o
 | Spanish | pausa, descanso, almuerzo, comida, café, recreo |
 | Polish | przerwa, pauza, obiad, kawa, śniadanie |
 
-Adjusted durations stop at zero. If a slot cannot absorb its equal share, the excess is shared among slots that still have time. If all following time is exhausted, the total shows the unavoidable meeting extension. Zero-duration slots can be passed with Next. On the last slot, Next is labelled **Finish** and records the slot's actual duration. There is no automatic advance.
+Adjusted durations stop at zero. If overtime exceeds the time left in all upcoming slots, the total includes the meeting extension. If every upcoming slot is at zero, newly saved time is shared using their original planned durations. Zero-duration slots can be passed with Next. On the last slot, Next is labelled **Finish** and records the slot's actual duration. There is no automatic advance.
 
 **Previous** loads the preceding item's adjusted duration without completing the current run. Browsing slots that have not started transfers no time. Next and Previous work while running, in overtime, paused, or stopped. **Reset** discards the active run's measured time and restores its timer baseline; it preserves adjustments already applied to other slots. **Eject** is disabled while counting down or measuring overtime; it clears the agenda and timer while keeping the panel visible and locked.
 
@@ -100,6 +100,6 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-The tests automatically use `/usr/bin/chromium` when available; set `CHROMIUM_PATH` for another installed Chromium executable. They cover masked input, Stop/Reset semantics, pointer and keyboard controls, actual MP3/custom-file playback, invalid-file handling, preferences, final-ten-second warnings, reduced motion, responsive layouts, strict agenda parsing, draft validation, navigation, overtime pause/resume, early completion, break/discussion deductions, equal sharing, exhausted schedules, Unicode editing, and adjusted agenda persistence. They block external requests. `SCREENSHOT_DIR=/tmp/countdown-screens npm run test:browser` also saves reference screenshots.
+The tests automatically use `/usr/bin/chromium` when available; set `CHROMIUM_PATH` for another installed Chromium executable. They cover masked input, Stop/Reset semantics, pointer and keyboard controls, actual MP3/custom-file playback, invalid-file handling, preferences, final-ten-second warnings, reduced motion, responsive layouts, strict agenda parsing, draft validation, navigation, overtime pause/resume, proportional redistribution of overtime and unused time, break recognition, exhausted schedules, Unicode editing, and adjusted agenda persistence. They block external requests. `SCREENSHOT_DIR=/tmp/countdown-screens npm run test:browser` also saves reference screenshots.
 
 The app binds to `127.0.0.1` by default. `HOST` and `PORT` are optional. No credentials or external services are required. The self-hosted Barlow Condensed and VT323 fonts are distributed under the SIL Open Font License; see `public/fonts/OFL.txt` and `public/fonts/VT323-OFL.txt`.

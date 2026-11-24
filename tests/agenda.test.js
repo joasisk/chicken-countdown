@@ -46,11 +46,6 @@ test("break words match anywhere in a title in all six languages, with or withou
     for (const spelling of [keyword, keyword.toUpperCase(), normalizeAgendaTitle(keyword)]) {
       const title = `Team — ${spelling} (15 minutes)`;
       assert.equal(isBreakTitle(title), true, title);
-      const agenda = new Agenda({ text: `01:00 Talk\n03:00 Next\n02:00 ${title}\n01:00 Open discussion` });
-      agenda.finishActive(90_000);
-      assert.deepEqual(agenda.durations, [90_000, 180_000, 90_000, 60_000], title);
-      assert.equal(agenda.entries[2].title, title);
-      assert.ok(agenda.saved().text.includes(title));
     }
   }
 });
@@ -133,46 +128,40 @@ test("reload restores only validated committed entries and clamps the selection"
   assert.deepEqual(invalid.saved(), { text: "", activeIndex: null });
 });
 
-test("early completion adds the precise saved time to the next slot, including breaks", () => {
+test("early completion shares precise saved time in proportion to upcoming durations", () => {
   const agenda = new Agenda({ text: "05:00 Talk\n02:00 Break\n10:00 Next" });
   assert.deepEqual(agenda.finishActive(210_250), { saved: 89_750, overtime: 0, unrecovered: 0 });
-  assert.deepEqual(agenda.durations, [210_250, 209_750, 600_000]);
+  assert.deepEqual(agenda.durations, [210_250, 134_958, 674_792]);
   assert.equal(agenda.totalSeconds, 1020);
-  assert.equal(agenda.navigate(1), 209_750);
+  assert.equal(agenda.navigate(1), 134_958);
   assert.match(agenda.saved().text, /02:00 Break/);
 });
 
-test("overtime uses upcoming breaks first and leaves presentations intact", () => {
-  const agenda = new Agenda({ text: "05:00 Talk\n10:00 Next\n02:00 Coffee BREAK\n01:00 Break\n05:00 Open discussion" });
-  assert.deepEqual(agenda.finishActive(450_000), { saved: 0, overtime: 150_000, unrecovered: 0 });
-  assert.deepEqual(agenda.durations, [450_000, 600_000, 0, 30_000, 300_000]);
-  assert.equal(agenda.totalSeconds, 1380);
+test("overtime is proportional across a five-minute break and thirty-minute open discussion", () => {
+  const agenda = new Agenda({ text: "05:00 Talk\n05:00 Break\n30:00 Open discussion" });
+  assert.deepEqual(agenda.finishActive(900_000), { saved: 0, overtime: 600_000, unrecovered: 0 });
+  assert.deepEqual(agenda.durations, [900_000, 214_286, 1_285_714]);
+  assert.equal(agenda.totalSeconds, 2400);
 });
 
-test("a final open discussion absorbs overtime after breaks, but ordinary discussions share equally", () => {
-  const agenda = new Agenda({ text: "05:00 Talk\n10:00 Next\n01:00 Lunch\n05:00 OPEN DISCUSSION" });
-  agenda.finishActive(480_000);
-  assert.deepEqual(agenda.durations, [480_000, 600_000, 0, 180_000]);
-  const noBreak = new Agenda({ text: "05:00 Talk\n10:00 Next\n05:00 Open discussion" });
-  noBreak.finishActive(360_000);
-  assert.deepEqual(noBreak.durations, [360_000, 600_000, 240_000]);
-  const ordinary = new Agenda({ text: "05:00 Talk\n10:00 Next\n05:00 Discussion" });
-  ordinary.finishActive(360_000);
-  assert.deepEqual(ordinary.durations, [360_000, 570_000, 270_000]);
-  const earlier = new Agenda({ text: "05:00 Talk\n05:00 Open discussion\n10:00 Next" });
-  earlier.finishActive(360_000);
-  assert.deepEqual(earlier.durations, [360_000, 270_000, 570_000]);
+test("the current adjusted budget determines each slot's share of saved time", () => {
+  const agenda = new Agenda({
+    text: "02:00 Talk\n05:00 Break\n05:00 Next\n05:00 Open discussion",
+    durations: [120_000, 0, 90_000, 30_000],
+  });
+  assert.deepEqual(agenda.finishActive(60_000), { saved: 60_000, overtime: 0, unrecovered: 0 });
+  assert.deepEqual(agenda.durations, [60_000, 0, 135_000, 45_000]);
 });
 
-test("without buffers every following slot loses an equal share, preserving all milliseconds", () => {
+test("proportional shares preserve every millisecond and survive reload", () => {
   const agenda = new Agenda({ text: "05:00 Talk\n03:00 A\n04:00 B\n05:00 C" });
   agenda.finishActive(420_001);
-  assert.deepEqual(agenda.durations, [420_001, 139_999, 200_000, 260_000]);
+  assert.deepEqual(agenda.durations, [420_001, 150_000, 199_999, 250_000]);
   assert.equal(agenda.totalSeconds, 1020);
   const saved = agenda.saved();
   const restored = new Agenda(saved);
   assert.deepEqual(restored.saved(), saved);
-  assert.equal(restored.navigate(1), 139_999);
+  assert.equal(restored.navigate(1), 150_000);
   restored.editingUnlocked = true;
   restored.updateDraft("01:00 Replacement");
   restored.commit();
@@ -180,20 +169,19 @@ test("without buffers every following slot loses an equal share, preserving all 
   assert.equal(restored.adjusted, false);
 });
 
-test("short slots reach zero; excess is redistributed, with unavoidable extension reported", () => {
-  const agenda = new Agenda({ text: "01:00 Talk\n00:10 Short\n01:00 Long\n01:00 Last" });
-  assert.deepEqual(agenda.finishActive(150_000), { saved: 0, overtime: 90_000, unrecovered: 0 });
-  assert.deepEqual(agenda.durations, [150_000, 0, 20_000, 20_000]);
-  const overflow = new Agenda({ text: "01:00 Talk\n00:10 Break\n00:20 Next\n00:30 Open discussion" });
-  assert.deepEqual(overflow.finishActive(180_000), { saved: 0, overtime: 120_000, unrecovered: 60_000 });
-  assert.deepEqual(overflow.durations, [180_000, 0, 0, 0]);
-  assert.equal(overflow.totalSeconds, 180);
+test("excess overtime extends the meeting and saved time can restore exhausted slots", () => {
+  const agenda = new Agenda({ text: "01:00 Talk\n00:10 Break\n00:20 Next\n00:30 Open discussion" });
+  assert.deepEqual(agenda.finishActive(180_000), { saved: 0, overtime: 120_000, unrecovered: 60_000 });
+  assert.deepEqual(agenda.durations, [180_000, 0, 0, 0]);
+  assert.equal(agenda.totalSeconds, 180);
+  assert.deepEqual(agenda.finishActive(120_000), { saved: 60_000, overtime: 0, unrecovered: 0 });
+  assert.deepEqual(agenda.durations, [120_000, 10_000, 20_000, 30_000]);
 });
 
 test("consecutive finishes use adjusted budgets and never change earlier slots", () => {
   const agenda = new Agenda({ text: "01:00 Break\n05:00 Talk\n10:00 Next\n05:00 Last", activeIndex: 1 });
   agenda.finishActive(420_000);
-  assert.deepEqual(agenda.durations, [60_000, 420_000, 540_000, 240_000]);
+  assert.deepEqual(agenda.durations, [60_000, 420_000, 520_000, 260_000]);
   agenda.navigate(1);
   agenda.finishActive(480_000);
   assert.deepEqual(agenda.durations, [60_000, 420_000, 480_000, 300_000]);
@@ -204,6 +192,8 @@ test("final slot finishes account for meeting length and invalid saved adjustmen
   const agenda = new Agenda({ text: "01:00 Only" });
   assert.deepEqual(agenda.finishActive(90_000), { saved: 0, overtime: 30_000, unrecovered: 30_000 });
   assert.equal(agenda.totalSeconds, 90);
+  assert.deepEqual(agenda.finishActive(45_000), { saved: 45_000, overtime: 0, unrecovered: 0 });
+  assert.equal(agenda.totalSeconds, 45);
   assert.equal(agenda.finishActive(-1), null);
   for (const durations of [[-1], [100.5], [], ["60000"], [Number.MAX_SAFE_INTEGER + 1]]) {
     const restored = new Agenda({ text: "01:00 Only", durations });

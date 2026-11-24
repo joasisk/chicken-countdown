@@ -990,7 +990,7 @@ test("instrument interface works in Chromium without external services", async (
     await waitState(page, 'running');
     await page.locator('#agenda-next').click();
     await waitState(page, 'idle');
-    assert.equal(await page.locator('#timer-display').textContent(), '14:30');
+    assert.equal(await page.locator('#timer-display').textContent(), '13:28');
     await advance(page, 600000);
     await waitState(page, 'idle');
     assert.equal(await page.evaluate(() => window.__audiblePlays), 0);
@@ -1105,7 +1105,7 @@ test("instrument interface works in Chromium without external services", async (
     assert.deepEqual(errors, []);
   });
 
-  await t.test('overtime counts up, pauses precisely, alarms once, and reduces breaks on Next', async (t) => {
+  await t.test('overtime counts up, pauses precisely, alarms once, and is shared proportionally on Next', async (t) => {
     const { page, errors } = await open(t);
     await setAgenda(page, '01:00 Talk\n03:00 Next\n01:00 Coffee break\n02:00 Open discussion');
     await page.locator('#start').click();
@@ -1125,15 +1125,15 @@ test("instrument interface works in Chromium without external services", async (
     await page.waitForFunction(() => document.getElementById('timer-display').textContent === '00:20');
     assert.equal(await page.evaluate(() => window.__audiblePlays), 1);
     await page.locator('#agenda-next').click();
-    assert.equal(await page.locator('#timer-display').textContent(), '03:00');
-    assert.match(await page.locator('#agenda-measure').textContent(), /00:40 Coffee break/);
+    assert.equal(await page.locator('#timer-display').textContent(), '02:50');
+    assert.match(await page.locator('#agenda-measure').textContent(), /00:57 Coffee break/);
     assert.match(await page.locator('#agenda-input').inputValue(), /01:00 Coffee break/);
     assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 07:00');
     await page.reload();
     await page.locator('#agenda-toggle').click();
-    assert.match(await page.locator('#agenda-measure').textContent(), /00:40 Coffee break/);
+    assert.match(await page.locator('#agenda-measure').textContent(), /00:57 Coffee break/);
     await page.locator('#agenda-next').click();
-    assert.equal(await page.locator('#timer-display').textContent(), '00:40');
+    assert.equal(await page.locator('#timer-display').textContent(), '00:57');
     assert.deepEqual(errors, []);
   });
 
@@ -1229,36 +1229,33 @@ test("instrument interface works in Chromium without external services", async (
     }
   });
 
-  await t.test('multilingual break words anywhere in titles absorb overtime and preserve original spelling', async (t) => {
+  await t.test('multilingual break titles keep their spelling and share overtime with other slots', async (t) => {
     const { page, errors } = await open(t);
     const titles = ['Team lunch together', 'Teraz PRESTÁVKA', 'Jetzt Mittagspause', 'Tempo per CAFFÈ', 'Ahora café', 'Teraz ŚNIADANIE'];
     const text = ['01:00 Talk', '03:00 Next', ...titles.map(title => `00:20 ${title}`), '02:00 Open discussion'].join('\n');
     await setAgenda(page, text);
     await page.locator('#start').click();
     await page.evaluate(() => {
-      window.__timeOffset += 190000;
+      window.__timeOffset += 165000;
       document.getElementById('agenda-next').click();
     });
-    assert.equal(await page.locator('#timer-display').textContent(), '03:00');
+    assert.equal(await page.locator('#timer-display').textContent(), '02:15');
     const adjusted = await page.locator('#agenda-measure').textContent();
-    for (const title of titles) assert.ok(adjusted.includes(`00:00 ${title}`), title);
-    assert.ok(adjusted.includes('01:50 Open discussion'));
+    for (const title of titles) assert.ok(adjusted.includes(`00:15 ${title}`), title);
+    assert.ok(adjusted.includes('01:30 Open discussion'));
     assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 08:00');
     assert.equal(await page.locator('#agenda-input').inputValue(), text);
     await page.reload();
     await page.locator('#agenda-toggle').click();
     assert.equal(await page.locator('#agenda-input').inputValue(), text);
-    assert.ok((await page.locator('#agenda-measure').textContent()).includes('00:00 Teraz ŚNIADANIE'));
+    assert.ok((await page.locator('#agenda-measure').textContent()).includes('00:15 Teraz ŚNIADANIE'));
     assert.deepEqual(errors, []);
   });
 
-  await t.test('Next snapshots late clicks, uses final open discussion, and divides overtime without buffers', async (t) => {
+  await t.test('Next snapshots late clicks and divides overtime proportionally for any title', async (t) => {
     const { page, errors } = await open(t);
-    for (const [text, expected, rows] of [
-      ['01:00 Talk\n03:00 Next\n02:00 Open discussion', '03:00', ['01:00 Open discussion']],
-      ['01:00 Talk\n03:00 Next\n02:00 Last', '02:30', ['01:30 Last']],
-    ]) {
-      await setAgenda(page, text);
+    for (const title of ['Open discussion', 'Last']) {
+      await setAgenda(page, `01:00 Talk\n03:00 Next\n02:00 ${title}`);
       await page.locator('#agenda-previous').click();
       await page.locator('#start').click();
       // Click in the same event before the animation frame refreshes the timer.
@@ -1266,8 +1263,8 @@ test("instrument interface works in Chromium without external services", async (
         window.__timeOffset += 120000;
         document.getElementById('agenda-next').click();
       });
-      assert.equal(await page.locator('#timer-display').textContent(), expected);
-      for (const row of rows) assert.ok((await page.locator('#agenda-measure').textContent()).includes(row));
+      assert.equal(await page.locator('#timer-display').textContent(), '02:24');
+      assert.ok((await page.locator('#agenda-measure').textContent()).includes(`01:36 ${title}`));
       assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 06:00');
     }
     assert.equal(await page.evaluate(() => window.__audiblePlays), 0);
@@ -1282,15 +1279,16 @@ test("instrument interface works in Chromium without external services", async (
     await page.locator('#stop').click();
     await advance(page, 600000);
     await page.locator('#agenda-next').click();
-    assert.equal(await page.locator('#timer-display').textContent(), '02:40');
+    assert.equal(await page.locator('#timer-display').textContent(), '02:16');
+    assert.match(await page.locator('#announcer').textContent(), /00:40 saved and shared across upcoming slots/);
     await page.locator('#agenda-next').click();
-    assert.equal(await page.locator('#timer-display').textContent(), '03:00');
+    assert.equal(await page.locator('#timer-display').textContent(), '03:24');
     await page.locator('#agenda-previous').click();
-    assert.equal(await page.locator('#timer-display').textContent(), '02:40');
+    assert.equal(await page.locator('#timer-display').textContent(), '02:16');
     await page.locator('#start').click();
     await advance(page, 200000);
     await page.locator('#stop').click();
-    assert.equal(await page.locator('#timer-display').textContent(), '00:40');
+    assert.equal(await page.locator('#timer-display').textContent(), '01:04');
     await advance(page, 120000);
     await page.locator('#agenda-next').click();
     assert.equal(await page.locator('#timer-display').textContent(), '02:20');

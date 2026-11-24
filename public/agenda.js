@@ -150,38 +150,35 @@ export class Agenda {
     if (this.activeIndex === null || !Number.isSafeInteger(elapsed) || elapsed < 0) return null;
     const delta = this.selectedDuration - elapsed;
     this.durations[this.activeIndex] = elapsed;
-    const following = this.entries.map((_, index) => index).slice(this.activeIndex + 1);
-    if (delta >= 0) {
-      if (following.length) this.durations[following[0]] += delta;
-      return { saved: delta, overtime: 0, unrecovered: 0 };
+    const saved = Math.max(0, delta);
+    const overtime = Math.max(0, -delta);
+    const nextIndex = this.activeIndex + 1;
+    if (!delta || nextIndex === this.durations.length)
+      return { saved, overtime, unrecovered: overtime };
+
+    const following = this.durations.slice(nextIndex).map(BigInt);
+    const remaining = following.reduce((sum, duration) => sum + duration, 0n);
+    const budget = remaining + BigInt(delta);
+    if (budget <= 0n) {
+      this.durations.fill(0, nextIndex);
+      return { saved, overtime, unrecovered: Number(-budget) };
     }
-    let debt = -delta;
-    // Upcoming breaks absorb overruns before the final open discussion.
-    const breaks = following.filter(index => isBreakTitle(this.entries[index].title));
-    const last = following.at(-1);
-    const buffers = [...breaks];
-    if (last !== undefined && /\bopen\s+discussion\b/i.test(this.entries[last].title) && !buffers.includes(last))
-      buffers.push(last);
-    for (const index of buffers) {
-      const deduction = Math.min(debt, this.durations[index]);
-      this.durations[index] -= deduction;
-      debt -= deduction;
-      if (!debt) break;
+
+    // Use the original plan to allocate saved time when every upcoming slot is at zero.
+    const weights = remaining > 0n
+      ? following
+      : this.entries.slice(nextIndex).map(entry => BigInt(entry.durationSeconds));
+    const totalWeight = remaining || weights.reduce((sum, weight) => sum + weight, 0n);
+    let cumulativeWeight = 0n;
+    let allocated = 0n;
+    // Round cumulative shares so the slots add up to the exact millisecond budget.
+    for (const [index, weight] of weights.entries()) {
+      cumulativeWeight += weight;
+      const cumulativeDuration = (budget * cumulativeWeight + totalWeight / 2n) / totalWeight;
+      this.durations[nextIndex + index] = Number(cumulativeDuration - allocated);
+      allocated = cumulativeDuration;
     }
-    // Equal shares, capped at zero. Redistribute a short slot's excess share
-    // among the other slots, keeping every millisecond accounted for.
-    let recipients = following.filter(index => this.durations[index] > 0);
-    while (debt > 0 && recipients.length) {
-      const share = Math.floor(debt / recipients.length);
-      const extra = debt % recipients.length;
-      recipients.forEach((index, position) => {
-        const deduction = Math.min(this.durations[index], share + (position < extra ? 1 : 0));
-        this.durations[index] -= deduction;
-        debt -= deduction;
-      });
-      recipients = recipients.filter(index => this.durations[index] > 0);
-    }
-    return { saved: 0, overtime: -delta, unrecovered: debt };
+    return { saved, overtime, unrecovered: 0 };
   }
 
   eject(status, remaining) {
