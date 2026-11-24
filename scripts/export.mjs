@@ -15,7 +15,7 @@ for (const filename of ["BarlowCondensed-ExtraBold.ttf", "VT323-Regular.ttf"]) {
   css = css.replace(`fonts/${filename}`, `data:font/ttf;base64,${font.toString("base64")}`);
 }
 const timer = (await read("timer.js")).replace(/^export /gm, "");
-const agenda = (await read("agenda.js")).replace(/^export /gm, "");
+const agenda = (await read("agenda.js")).replace(/^import .*;\n/gm, "").replace(/^export /gm, "");
 const audio = (await read("audio.js"))
   .replace(/export const DEFAULT_SOUND_URL = new URL\([\s\S]*?\)\.href;/,
     'const DEFAULT_SOUND_URL = new URL("./screaming-chickens.mp3", document.baseURI).href;')

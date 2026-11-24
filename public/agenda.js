@@ -1,3 +1,25 @@
+import { formatTime, MAX_DURATION } from "./timer.js";
+
+const minutesPerDay = 24 * 60;
+const clockWindow = /^([^\S\r\n]*)(\d{1,2}:\d{2})[^\S\r\n]*([-–—])[^\S\r\n]*(\d{1,2}:\d{2})([^\S\r\n]+|$)/gm;
+
+function minutesSinceMidnight(time) {
+  const [hours, minutes] = time.split(":").map(Number);
+  return hours < 24 && minutes < 60 ? hours * 60 + minutes : NaN;
+}
+
+export function convertAgendaTimeWindows(text, { includeFirstLine = true } = {}) {
+  return text.replace(clockWindow, (prefix, indent, startTime, dash, endTime, gap, offset) => {
+    if (offset === 0 && !includeFirstLine) return prefix;
+    const elapsedMinutes = (minutesSinceMidnight(endTime) - minutesSinceMidnight(startTime) + minutesPerDay) % minutesPerDay;
+    const duration = elapsedMinutes * 60_000;
+    if (duration > 0 && duration <= MAX_DURATION)
+      return `${indent}${formatTime(duration)}${gap ? " " : ""}`;
+    // Keep invalid ranges together so duration validation can flag the row.
+    return `${indent}${startTime}${dash}${endTime}${gap}`;
+  });
+}
+
 export function parseAgenda(text) {
   const entries = [];
   const errors = [];

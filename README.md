@@ -41,6 +41,8 @@ Select **Agenda**, then **Stop** to unlock its display. Enter or paste one durat
 02:00 Wrap-up
 ```
 
+You can also paste one 24-hour clock window and title per line. For example, `9:00 - 9:15 Small talk` becomes `15:00 Small talk`.
+
 Each duration must be exactly `MM:SS`, from `00:01` to `99:59`, followed by a space or tab and a title. Blank lines are ignored; titles retain accents, case, punctuation, internal spacing, and duplicates. Valid edits save on blur, hiding the panel, or Start. The first item loads automatically; later edits keep or clamp the selected item and load its full planned duration. An unchanged blur preserves the timer's remainder. The total is read-only and can exceed `99:59`.
 
 **Start / Resume** locks the agenda. **Pause** and natural expiration keep it locked. **Stop** keeps the timer remainder, unlocks editing, and focuses the visible agenda. Reset and running-display double-click restore the timer baseline, discard pending agenda edits, and lock editing. Escape clears the timer and baseline, discards pending edits, and retains the saved agenda. Showing/hiding preserves timer state, contents, and the editing latch.

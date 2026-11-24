@@ -1,6 +1,6 @@
 import { Countdown, durationFromInput, formatTime } from "./timer.js";
 import { AlarmAudio } from "./audio.js";
-import { Agenda, isBreakTitle } from "./agenda.js";
+import { Agenda, convertAgendaTimeWindows, isBreakTitle } from "./agenda.js";
 
 const $ = (id) => document.getElementById(id);
 const timer = new Countdown();
@@ -338,6 +338,20 @@ $("agenda-toggle").addEventListener("click", () => {
   agenda.visible = !agenda.visible;
   render();
   positionAgendaSelection();
+});
+agendaEditor.addEventListener("paste", (event) => {
+  const text = event.clipboardData?.getData("text/plain");
+  if (agendaEditor.readOnly || !text) return;
+  const beforeSelection = agendaEditor.value.slice(0, agendaEditor.selectionStart);
+  const rowPrefix = beforeSelection.slice(beforeSelection.lastIndexOf("\n") + 1);
+  const converted = convertAgendaTimeWindows(text, { includeFirstLine: !rowPrefix.trim() });
+  if (converted === text) return;
+
+  event.preventDefault();
+  // Inserting through the browser keeps the paste in the textarea's undo history.
+  if (document.activeElement === agendaEditor && document.execCommand?.("insertText", false, converted)) return;
+  agendaEditor.setRangeText(converted, agendaEditor.selectionStart, agendaEditor.selectionEnd, "end");
+  agendaEditor.dispatchEvent(new Event("input", { bubbles: true }));
 });
 agendaEditor.addEventListener("input", () => {
   if (!agenda.updateDraft(agendaEditor.value)) return;

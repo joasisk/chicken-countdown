@@ -863,6 +863,34 @@ test("instrument interface works in Chromium without external services", async (
     assert.deepEqual(errors, []);
   });
 
+  await t.test('pasting clock windows converts selected agenda rows and preserves undo', async (t) => {
+    const { page, errors } = await open(t);
+    const original = '02:30 Welcome\n01:00 Replace\n03:00 Wrap-up';
+    await setAgenda(page, original);
+    const input = page.locator('#agenda-input');
+    await input.focus();
+    await input.evaluate(el => {
+      el.setSelectionRange(el.value.indexOf('01:00'), el.value.lastIndexOf('\n'));
+      const clipboardData = new DataTransfer();
+      clipboardData.setData('text/plain', '9:00 - 9:15 small talk\r\n09:50–10:10 Team  discussion\r\n00:30 Break');
+      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+    });
+    const converted = '02:30 Welcome\n15:00 small talk\n20:00 Team  discussion\n00:30 Break\n03:00 Wrap-up';
+    assert.equal(await input.inputValue(), converted);
+    await input.press('ControlOrMeta+z');
+    assert.equal(await input.inputValue(), original);
+    await input.press('ControlOrMeta+Shift+z');
+    assert.equal(await input.inputValue(), converted);
+    await input.blur();
+    assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 41:00');
+    await page.locator('#agenda-next').click();
+    assert.equal(await page.locator('#timer-display').textContent(), '15:00');
+    await page.reload();
+    await page.locator('#agenda-toggle').click();
+    assert.equal(await input.inputValue(), converted);
+    assert.deepEqual(errors, []);
+  });
+
   await t.test('natural expiry and repeated navigation acknowledge sound, and Eject clears silently', async (t) => {
     const { page, errors } = await open(t);
     await setAgenda(page, '00:01 Welcome\n00:02 Discussion\n00:03 Wrap-up');

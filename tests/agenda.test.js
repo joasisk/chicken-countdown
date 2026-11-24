@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Agenda, isBreakTitle, normalizeAgendaTitle, parseAgenda } from "../public/agenda.js";
+import { Agenda, convertAgendaTimeWindows, isBreakTitle, normalizeAgendaTitle, parseAgenda } from "../public/agenda.js";
 import { formatTime } from "../public/timer.js";
 
 test("strict agenda parsing preserves Unicode, internal spaces, order and duplicates", () => {
@@ -15,6 +15,21 @@ test("strict agenda parsing preserves Unicode, internal spaces, order and duplic
   const result = parseAgenda(`\n${malformed.join("\n")}\n99:59 Valid`);
   assert.deepEqual(result.errors.map(error => error.line), malformed.map((_, i) => i + 2));
   assert.deepEqual(result.entries, [{ durationSeconds: 5999, title: "Valid" }]);
+});
+
+test("pasted agenda windows become durations, including across midnight", () => {
+  const text = "  9:00 - 9:15 small talk\r\n05:30 Already timed\r\n\r\n09:50 – 10:10 Úvod  & café\r\n23:50—0:05 Wrap-up";
+  assert.equal(convertAgendaTimeWindows(text),
+    "  15:00 small talk\r\n05:30 Already timed\r\n\r\n20:00 Úvod  & café\r\n15:00 Wrap-up");
+  assert.equal(convertAgendaTimeWindows("9:00 - 9:15 title text\n9:30 - 9:35 Next", { includeFirstLine: false }),
+    "9:00 - 9:15 title text\n05:00 Next");
+});
+
+test("invalid pasted windows fail the usual line validation", () => {
+  const text = "09:00 - 09:00 Zero\n09:00 - 09:60 Bad minutes\n09:00 - 10:40 Too long\n09:00 - 09:15\n09:00 - 10:39 Valid";
+  const { entries, errors } = parseAgenda(convertAgendaTimeWindows(text));
+  assert.deepEqual(errors.map(error => error.line), [1, 2, 3, 4]);
+  assert.deepEqual(entries, [{ durationSeconds: 5940, title: "Valid" }]);
 });
 
 test("break words match anywhere in a title in all six languages, with or without accents", () => {
