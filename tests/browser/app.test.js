@@ -935,29 +935,25 @@ test("instrument interface works in Chromium without external services", async (
     await assertTransport(page, true, false, true);
     await page.locator('#agenda-next').click();
     assert.equal(await page.locator('#timer-display').textContent(), '00:02');
-    assert.equal(await page.locator('#timer-face').getAttribute('data-state'), 'idle');
+    await waitState(page, 'running');
     assert.equal(await page.evaluate(() => window.__alarmAudio.paused), true);
-    await assertTransport(page, true, true, true);
-    await page.locator('#agenda-next').click();
-    assert.equal(await page.locator('#timer-display').textContent(), '00:03');
-    await page.locator('#agenda-previous').click();
-    assert.equal(await page.locator('#timer-display').textContent(), '00:02');
-    await page.locator('#mute').click();
-    await page.locator('#start').click();
+    await assertTransport(page, true, false, true);
     await advance(page, 2000);
     await waitState(page, 'overtime');
-    await assertTransport(page, true, false, true);
+    await page.waitForFunction(() => window.__audiblePlays === 2 && !window.__alarmAudio.paused);
     await page.locator('#agenda-previous').click();
     assert.equal(await page.locator('#timer-display').textContent(), '00:01');
+    await waitState(page, 'idle');
     await assertTransport(page, true, true, true);
+    await page.locator('#mute').click();
+    await page.locator('#start').click();
     for (const seconds of [1, 2]) {
-      await page.locator('#start').click();
       await advance(page, seconds * 1000);
       await waitState(page, 'overtime');
       await page.locator('#agenda-next').click();
-      await assertTransport(page, true, true, true);
+      await waitState(page, 'running');
+      await assertTransport(page, true, false, true);
     }
-    await page.locator('#start').click();
     await advance(page, 3000);
     await waitState(page, 'overtime');
     await assertTransport(page, true, false, true);
@@ -972,11 +968,11 @@ test("instrument interface works in Chromium without external services", async (
     await assertTransport(page, true, true, true);
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('#timer-display').textContent(), '00:00');
-    assert.equal(await page.evaluate(() => window.__audiblePlays), 1);
+    assert.equal(await page.evaluate(() => window.__audiblePlays), 2);
     assert.deepEqual(errors, []);
   });
 
-  await t.test('navigation can end items early and Eject is blocked only while running', async (t) => {
+  await t.test('Next starts the adjusted slot after an early finish and Eject is blocked while running', async (t) => {
     const { page, errors } = await open(t);
     await setAgenda(page, '05:00 First\n10:00 Second\n03:00 Last');
     await assertTransport(page, true, true, true);
@@ -989,12 +985,12 @@ test("instrument interface works in Chromium without external services", async (
     assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 18:00');
     await waitState(page, 'running');
     await page.locator('#agenda-next').click();
-    await waitState(page, 'idle');
+    await waitState(page, 'running');
     assert.equal(await page.locator('#timer-display').textContent(), '13:28');
+    assert.match(await page.locator('#announcer').textContent(), /^Started Second\./);
     await advance(page, 600000);
-    await waitState(page, 'idle');
+    await page.waitForFunction(() => document.getElementById('timer-display').textContent === '03:28');
     assert.equal(await page.evaluate(() => window.__audiblePlays), 0);
-    await page.locator('#start').click();
     await page.locator('#pause').click();
     await assertTransport(page, true, true, true);
     await page.locator('#agenda-previous').click();
@@ -1091,7 +1087,10 @@ test("instrument interface works in Chromium without external services", async (
     await page.locator('#agenda-next').focus();
     await page.keyboard.press('Enter');
     assert.equal(await page.locator('#timer-display').textContent(), '00:02');
-    await assertTransport(page, true, true, true);
+    await waitState(page, 'running');
+    await assertTransport(page, true, false, true);
+    await page.keyboard.press('Space');
+    await waitState(page, 'paused');
     await page.keyboard.press('Space');
     await waitState(page, 'running');
     await page.getByRole('button', { name: 'Pause timer', exact: true }).dblclick();
@@ -1124,7 +1123,9 @@ test("instrument interface works in Chromium without external services", async (
     await advance(page, 5000);
     await page.waitForFunction(() => document.getElementById('timer-display').textContent === '00:20');
     assert.equal(await page.evaluate(() => window.__audiblePlays), 1);
+    await page.locator('#pause').click();
     await page.locator('#agenda-next').click();
+    await waitState(page, 'idle');
     assert.equal(await page.locator('#timer-display').textContent(), '02:50');
     assert.match(await page.locator('#agenda-measure').textContent(), /00:57 Coffee break/);
     assert.match(await page.locator('#agenda-input').inputValue(), /01:00 Coffee break/);
@@ -1221,10 +1222,9 @@ test("instrument interface works in Chromium without external services", async (
       assert.equal(await page.locator('#timer-display').evaluate(el => getComputedStyle(el).webkitTextStrokeWidth), '10px');
       await screenshot(page, `break-overtime-${theme}`);
       await page.locator('#agenda-next').click();
+      await waitState(page, 'running');
       assert.equal((await glow()).opacity, 0);
       assert.equal(await page.locator('#overtime-label').isVisible(), false);
-      await page.locator('#start').click();
-      assert.equal((await glow()).opacity, 0);
       assert.deepEqual(errors, []);
     }
   });
@@ -1263,6 +1263,7 @@ test("instrument interface works in Chromium without external services", async (
         window.__timeOffset += 120000;
         document.getElementById('agenda-next').click();
       });
+      await waitState(page, 'running');
       assert.equal(await page.locator('#timer-display').textContent(), '02:24');
       assert.ok((await page.locator('#agenda-measure').textContent()).includes(`01:36 ${title}`));
       assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 06:00');
@@ -1279,6 +1280,7 @@ test("instrument interface works in Chromium without external services", async (
     await page.locator('#stop').click();
     await advance(page, 600000);
     await page.locator('#agenda-next').click();
+    await waitState(page, 'idle');
     assert.equal(await page.locator('#timer-display').textContent(), '02:16');
     assert.match(await page.locator('#announcer').textContent(), /00:40 saved and shared across upcoming slots/);
     await page.locator('#agenda-next').click();
@@ -1307,6 +1309,7 @@ test("instrument interface works in Chromium without external services", async (
     await page.locator('#start').click();
     await advance(page, 120000);
     await page.locator('#agenda-next').click();
+    await waitState(page, 'idle');
     assert.equal(await page.locator('#timer-display').textContent(), '00:00');
     assert.equal(await page.locator('#start').isDisabled(), true);
     assert.equal(await page.locator('#agenda-total').textContent(), 'TOTAL 02:00');

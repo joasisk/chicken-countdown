@@ -90,6 +90,7 @@ test("two-file export runs and plays its alarm over file://", async (t) => {
   await page.locator("#start").click();
   await page.waitForFunction(() => document.getElementById("timer-face").dataset.state === "overtime");
   await page.locator("#agenda-next").click();
+  assert.equal(await page.locator("#timer-face").getAttribute("data-state"), "running");
   assert.equal(await page.locator("#timer-display").textContent(), "00:02");
   assert.equal(await page.locator("#agenda-next").isEnabled(), true);
   await page.keyboard.press("Escape");
@@ -185,6 +186,7 @@ test("Windows CRLF export matches the Unix build, fits the viewport and runs wit
   await page.locator("#start").click();
   await page.waitForFunction(() => document.getElementById("timer-face").dataset.state === "overtime");
   await page.locator("#agenda-next").click();
+  assert.equal(await page.locator("#timer-face").getAttribute("data-state"), "running");
   assert.equal(await page.locator("#timer-display").textContent(), "00:02");
   assert.equal(await page.locator("#agenda-next").isEnabled(), true);
   assert.deepEqual(errors, []);

@@ -395,14 +395,16 @@ function navigateAgenda(offset) {
       (offset === 1 && last && !timer.hasStarted)) return;
   // Only Next/Finish completes a started slot. Browsing an unstarted slot or
   // returning to a previous one never transfers an unused budget.
-  timer.snapshot();
+  const now = Date.now();
+  const { status, remaining } = timer.snapshot(now);
   const adjustment = offset === 1 && timer.hasStarted ? agenda.finishActive(timer.elapsed) : null;
   const finishing = offset === 1 && last;
-  const duration = finishing ? agenda.selectedDuration : agenda.navigate(offset, timer.status, timer.remaining);
+  const duration = finishing ? agenda.selectedDuration : agenda.navigate(offset, status, remaining);
   if (duration === null) return;
   cancelClick();
   audio.stop();
   configureTimer(duration);
+  const started = offset === 1 && !finishing && status === "running" && timer.start(now);
   agenda.lock();
   discardDraft();
   warned = false;
@@ -410,8 +412,11 @@ function navigateAgenda(offset) {
   const timing = adjustment?.overtime
     ? ` ${formatTime(adjustment.overtime)} overtime.${adjustment.unrecovered ? ` Meeting extended by ${formatTime(adjustment.unrecovered)}.` : ""}`
     : adjustment?.saved ? ` ${formatTime(adjustment.saved)} saved${finishing ? "." : " and shared across upcoming slots."}` : "";
-  announce(`${finishing ? "Agenda complete." : `Selected ${agenda.entries[agenda.activeIndex].title}. Press Start.`}${timing}`);
-  render({ allowAlarm: false });
+  const title = agenda.entries[agenda.activeIndex].title;
+  const message = finishing ? "Agenda complete." : `${started ? "Started" : "Selected"} ${title}.`;
+  const prompt = !finishing && !started && duration > 0 ? " Press Start." : "";
+  announce(`${message}${prompt}${timing}`);
+  render({ allowAlarm: started });
   revealAgendaSelection();
 }
 $("agenda-previous").addEventListener("click", () => navigateAgenda(-1));

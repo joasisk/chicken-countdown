@@ -55,7 +55,7 @@ With an agenda selected, reaching zero plays the alarm once and enters **OVERTIM
 
 An active break slot gives the timer a green glow, including while paused. If a break runs into overtime, its digits show the red outline with the green glow.
 
-**Next** finishes a started slot, silences the alarm, adjusts the schedule, and loads the next item's adjusted duration. Press Start to begin it. Upcoming slots, including breaks and open discussion, share overtime deductions and unused time in proportion to their current adjusted durations.
+**Next** finishes a started slot, silences the alarm, adjusts the schedule, and loads the next item's adjusted duration. If the timer is running, the next slot starts immediately. From a paused or stopped timer, press **Start** to begin the next slot. Upcoming slots, including breaks and open discussion, share overtime deductions and unused time in proportion to their current adjusted durations.
 
 Break keywords match whole words anywhere in the title, without regard to case or accents. For example, `Team lunch together`, `Teraz prestávka`, and `Tempo per CAFFÈ` all identify breaks. Original titles retain their spelling. Accent folding accepts `káva`/`kava`, `prestávka`/`prestavka`, `caffè`/`caffe`, and `śniadanie`/`sniadanie`; `ĺ`, `ľ`, and `ł` also normalize to `l`. A keyword embedded in an unrelated word, such as `breakthrough`, does not match.
 
@@ -68,7 +68,7 @@ Break keywords match whole words anywhere in the title, without regard to case o
 | Spanish | pausa, descanso, almuerzo, comida, café, recreo |
 | Polish | przerwa, pauza, obiad, kawa, śniadanie |
 
-Adjusted durations stop at zero. If overtime exceeds the time left in all upcoming slots, the total includes the meeting extension. If every upcoming slot is at zero, newly saved time is shared using their original planned durations. Zero-duration slots can be passed with Next. On the last slot, Next is labelled **Finish** and records the slot's actual duration. There is no automatic advance.
+Adjusted durations stop at zero. If overtime exceeds the time left in all upcoming slots, the total includes the meeting extension. If every upcoming slot is at zero, newly saved time is shared using their original planned durations. Zero-duration slots can be passed with Next. On the last slot, Next is labelled **Finish** and records the slot's actual duration. Reaching zero keeps the current slot selected.
 
 **Previous** loads the preceding item's adjusted duration without completing the current run. Browsing slots that have not started transfers no time. Next and Previous work while running, in overtime, paused, or stopped. **Reset** discards the active run's measured time and restores its timer baseline; it preserves adjustments already applied to other slots. **Eject** is disabled while counting down or measuring overtime; it clears the agenda and timer while keeping the panel visible and locked.
 
